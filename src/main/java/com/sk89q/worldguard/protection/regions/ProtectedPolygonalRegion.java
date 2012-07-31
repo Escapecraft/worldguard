@@ -157,6 +157,12 @@ public class ProtectedPolygonalRegion extends ProtectedRegion {
     }
 
     @Override
+    public int area() {
+        // Implement this sometime - Tulon
+        return 0;
+    }
+
+    @Override
     public int volume() {
         int volume = 0;
         // TODO: Fix this

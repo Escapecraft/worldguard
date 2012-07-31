@@ -103,7 +103,7 @@ public class ApplicableRegionSet implements Iterable<ProtectedRegion> {
         }
         return internalGetState(flag, null, null);
     }
-    
+
     /**
      * Gets the state of a state flag. This cannot be used for the build flag.
      * 
@@ -127,6 +127,27 @@ public class ApplicableRegionSet implements Iterable<ProtectedRegion> {
      */
     public boolean isOwnerOfAll(LocalPlayer player) {
         for (ProtectedRegion region : applicable) {
+            if (!region.isOwner(player)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Indicates whether a player is an owner of all regions in this set.
+     * Option to ignore negative priority regions.
+     * 
+     * @param player player
+     * @param flag if true, ignore negative priority regions
+     * @return whether the player is an owner of all regions
+     */
+    public boolean isOwnerOfAll(LocalPlayer player, boolean flag) {
+        for (ProtectedRegion region : applicable) {
+            if (flag && (region.getPriority() < 0)) {
+                continue;
+            }
             if (!region.isOwner(player)) {
                 return false;
             }

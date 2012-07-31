@@ -116,7 +116,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * Gets the id of this region
+     * Gets the id of this region.
      *
      * @return the id
      */
@@ -140,6 +140,27 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
      */
     public BlockVector getMaximumPoint() {
         return max;
+    }
+
+    /**
+     * Expand region to max vertical size.
+     *
+     * @param minY lowest Y
+     * @param maxY highest Y
+     */
+    public void expandVert(int minY, int maxY) {
+        min = new BlockVector(min.getBlockX(), minY, min.getBlockZ());
+        max = new BlockVector(max.getBlockX(), maxY, max.getBlockZ());
+    }
+
+    /**
+     * Expand region area evenly by number of specified blocks.
+     *
+     * @param amount the number of blocks to expand in X and Z directions
+     */
+    public void expandArea(int amount) {
+        min = new BlockVector(min.getBlockX() - amount, min.getBlockY(), min.getBlockZ() - amount);
+        max = new BlockVector(max.getBlockX() + amount, max.getBlockY(), max.getBlockZ() + amount);
     }
 
     /**
@@ -416,6 +437,13 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
      * @return The points for this region as (x, z) coordinates
      */
     public abstract List<BlockVector2D> getPoints();
+
+    /**
+     * Get the number of blocks in this region
+     *
+     * @return the area of this region in blocks
+     */
+    public abstract int area();
 
     /**
      * Get the number of blocks in this region

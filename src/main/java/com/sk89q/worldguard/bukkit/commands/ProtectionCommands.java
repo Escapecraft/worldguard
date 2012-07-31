@@ -41,4 +41,8 @@ public class ProtectionCommands {
     @Command(aliases = {"worldguard", "wg"}, desc = "WorldGuard commands")
     @NestedCommand({WorldGuardCommands.class})
     public void worldGuard(CommandContext args, CommandSender sender) {}
+
+    @Command(aliases = {"claim", "wgclaim"}, desc = "Claim commands")
+    @NestedCommand({ClaimCommands.class})
+    public void claim(CommandContext args, CommandSender sender) {}
 }
