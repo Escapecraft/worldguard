@@ -37,10 +37,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
-import org.bukkit.event.player.PlayerChatEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
@@ -304,7 +304,7 @@ public class WorldGuardPlayerListener implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onPlayerChat(PlayerChatEvent event) {
+    public void onPlayerChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
         WorldConfiguration wcfg = plugin.getGlobalStateManager().get(player.getWorld());
         if (wcfg.useRegions) {
@@ -329,7 +329,7 @@ public class WorldGuardPlayerListener implements Listener {
     public void onPlayerLogin(PlayerLoginEvent event) {
         Player player = event.getPlayer();
         ConfigurationManager cfg = plugin.getGlobalStateManager();
-        
+
         String hostKey = cfg.hostKeys.get(player.getName().toLowerCase());
         if (hostKey != null) {
             String hostname = event.getHostname();
@@ -337,7 +337,7 @@ public class WorldGuardPlayerListener implements Listener {
             if (colonIndex != -1) {
                 hostname = hostname.substring(0, colonIndex);
             }
-            
+
             if (!hostname.equals(hostKey)) {
                 event.disallow(PlayerLoginEvent.Result.KICK_OTHER,
                         "You did not join with the valid host key!");
@@ -667,7 +667,8 @@ public class WorldGuardPlayerListener implements Listener {
 
             if (type == BlockID.CAKE_BLOCK) {
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
-                        && !set.canBuild(localPlayer)) {
+                        && !set.canBuild(localPlayer)
+                        && !set.allows(DefaultFlag.USE, localPlayer)) {
                     player.sendMessage(ChatColor.DARK_RED + "You're not invited to this tea party!");
                     event.setUseInteractedBlock(Result.DENY);
                     event.setCancelled(true);
