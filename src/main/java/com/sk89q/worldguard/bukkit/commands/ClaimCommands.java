@@ -79,8 +79,8 @@ public class ClaimCommands {
      * <p />
      * Anyone with worldguard.claim.newland permission can claim new land.
      */
-    @Command(aliases = {"newland", "land", "nl"}, usage = "<cuboid_name>",
-            desc = "Defines a new cuboid", min = 1, max = 1)
+    @Command(aliases = {"newland", "land", "nl"}, usage = "<landclaim_name>",
+            desc = "Defines a new landclaim", min = 1, max = 1)
     // for claiming new land
     @CommandPermissions({"worldguard.claim.newland"})
     public void define(CommandContext args, CommandSender sender) throws CommandException {
@@ -174,22 +174,56 @@ public class ClaimCommands {
     }
 
     /**
-     * Get the flag.
+     * Add or remove a member of owned landclaim.
      * <p />
-     * Since sk89q doesn't have a way to get a known flag - have to search
-     * for it.
-     *
-     * @param flagName the flag name
-     * @return the flag object
+     * Only the owner may add or remove a member of a landclaim (or region).
      */
-    private Flag<?> getFlag(String flagName) {
-        for (Flag<?> flag : DefaultFlag.getFlags()) {
-            if (flag.getName().equalsIgnoreCase(flagName)) {
-                return flag;
-            }
+    @Command(aliases = {"member", "members", "mem"}, usage = "<landclaim_name> <add|remove> <members...>",
+            desc = "Add or remove members to an owned landclaim", min = 3)
+    public void changeMember(CommandContext args, CommandSender sender) throws CommandException {
+        Player player = plugin.checkPlayer(sender);
+        World world = player.getWorld();
+        LocalPlayer localPlayer = plugin.wrapPlayer(player);
+        String id = args.getString(0);
+        String subCmd = args.getString(1);
+        
+        if (id.equalsIgnoreCase("__global__")) {
+            throw new CommandException("You may not change the __global__ landclaim.");
         }
 
-        return null;
+        RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+        ProtectedRegion region = mgr.getRegionExact(id);
+
+        if (region == null) {
+            throw new CommandException("Could not find landclaim named: " + id);
+        }
+
+        if (!region.isOwner(localPlayer)) {
+            throw new CommandException("You are not the owner of this landclaim (" + id + ").  Only the owner may add or remove members.");
+        } 
+
+        id = region.getId();
+
+        if (!subCmd.equalsIgnoreCase("add") && !subCmd.equalsIgnoreCase("rem") && !subCmd.equalsIgnoreCase("remove")) {
+            throw new CommandException("You must specify whether to add or remove members.");
+        }
+
+        if (subCmd.equalsIgnoreCase("add")) {
+            RegionDBUtil.addToDomain(region.getMembers(), args.getPaddedSlice(3, 0), 0);
+        }
+
+        if (subCmd.equalsIgnoreCase("rem") || subCmd.equalsIgnoreCase("remove")) {
+            RegionDBUtil.removeFromDomain(region.getMembers(), args.getPaddedSlice(3, 0), 0);
+        }
+        
+        try {
+            mgr.save();
+            sender.sendMessage(ChatColor.YELLOW + "Landclaim " + id + " updated.");
+        } catch (ProtectionDatabaseException e) {
+            throw new CommandException("Failed to write Landclaim: "
+                    + e.getMessage());
+        }
+
     }
     
     /**
@@ -197,7 +231,7 @@ public class ClaimCommands {
      * <p />
      * Only the owner may change the size of a landclaim (or region).
      */
-    @Command(aliases = {"change", "update", "changesize", "expand"}, usage = "<id>",
+    @Command(aliases = {"change", "update", "changesize", "expand"}, usage = "<landclaim_name>",
             desc = "Changes the size of an owned landclaim", min = 1, max = 1)
     public void change(CommandContext args, CommandSender sender) throws CommandException {
         
@@ -292,7 +326,7 @@ public class ClaimCommands {
      * <p />
      * Anyone may select an existing landclaim (or region).
      */
-    @Command(aliases = {"select", "sel", "s", "choose"}, usage = "[id]",
+    @Command(aliases = {"select", "sel", "s", "choose"}, usage = "[landclaim_name]",
             desc = "Select an existing landclaim", min = 0, max = 1)
     public void select(CommandContext args, CommandSender sender) throws CommandException {
 
@@ -326,7 +360,7 @@ public class ClaimCommands {
      * Anyone may get information about an existing landclaim.
      * Must be claim type: land.
      */
-    @Command(aliases = {"info", "i"}, usage = "[world] [id]", flags = "s",
+    @Command(aliases = {"info", "i"}, usage = "[world] [landclaim_name]", flags = "s",
             desc = "Get information about a landclaim", min = 0, max = 2)
     public void info(CommandContext args, CommandSender sender) throws CommandException {
 
@@ -500,45 +534,42 @@ public class ClaimCommands {
         }
     }
     
-/** - TODO
-    @Command(aliases = {"remove", "delete", "del", "rem"}, usage = "<id>",
-            desc = "Remove a region", min = 1, max = 1)
+    @Command(aliases = {"remove", "delete", "del", "rem"}, usage = "<landclaim_name>",
+            desc = "Remove an owned landclaim", min = 1, max = 1)
     public void remove(CommandContext args, CommandSender sender) throws CommandException {
-        
+
         Player player = plugin.checkPlayer(sender);
         World world = player.getWorld();
         LocalPlayer localPlayer = plugin.wrapPlayer(player);
-        
         String id = args.getString(0);
-
+        
+        if (id.equalsIgnoreCase("__global__")) {
+            throw new CommandException("You may not change the __global__ landclaim.");
+        }
+        
         RegionManager mgr = plugin.getGlobalRegionManager().get(world);
         ProtectedRegion region = mgr.getRegionExact(id);
 
         if (region == null) {
-            throw new CommandException("Could not find a region by that ID.");
+            throw new CommandException("Could not find landclaim named: " + id);
         }
-        
-        if (region.isOwner(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.region.remove.own." + id.toLowerCase());
-        } else if (region.isMember(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.region.remove.member." + id.toLowerCase());
-        } else {
-            plugin.checkPermission(sender, "worldguard.region.remove." + id.toLowerCase());
-        }
+
+        if (!region.isOwner(localPlayer)) {
+            throw new CommandException("You are not the owner of this landclaim (" + id + ").  Only the owner may delete the landclaim.");
+        } 
         
         mgr.removeRegion(id);
         
         sender.sendMessage(ChatColor.YELLOW
-                + "Region '" + id + "' removed.");
+                + "Landclaim '" + id + "' deleted.");
         
         try {
             mgr.save();
         } catch (ProtectionDatabaseException e) {
-            throw new CommandException("Failed to write regions: "
+            throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
         }
     }
-*/
 
     private void selectRegion(Player player, LocalPlayer localPlayer, ProtectedRegion region) throws CommandException {
         final WorldEditPlugin worldEdit = plugin.getWorldEdit();
@@ -625,5 +656,24 @@ public class ClaimCommands {
 
         // get the next region in the list
         return set.iterator().next().getId();
+    }
+
+    /**
+     * Get the flag.
+     * <p />
+     * Since sk89q doesn't have a way to get a known flag - have to search
+     * for it.
+     *
+     * @param flagName the flag name
+     * @return the flag object
+     */
+    private Flag<?> getFlag(String flagName) {
+        for (Flag<?> flag : DefaultFlag.getFlags()) {
+            if (flag.getName().equalsIgnoreCase(flagName)) {
+                return flag;
+            }
+        }
+
+        return null;
     }
 }
