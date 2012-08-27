@@ -367,7 +367,7 @@ public class WorldConfiguration {
         claimFloor = getInt("regions.claim-floor", 0);
         claimIgnoreNegPriority = getBoolean("regions.claim-ignore-neg-priority", false);
         maxClaimVolume = getInt("regions.max-claim-volume", 30000);
-        maxClaimArea = getInt("region.max-claim-area", 2500);
+        maxClaimArea = getInt("regions.max-claim-area", 2500);
         claimOnlyInsideExistingRegions = getBoolean("regions.claim-only-inside-existing-regions", false);
 
         maxRegionCountPerPlayer = getInt("regions.max-region-count-per-player.default", 7);
