@@ -51,8 +51,10 @@ import com.sk89q.worldguard.domains.DefaultDomain;
 import com.sk89q.worldguard.protection.ApplicableRegionSet;
 import com.sk89q.worldguard.protection.flags.DefaultFlag;
 import com.sk89q.worldguard.protection.flags.Flag;
+import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.flags.InvalidFlagFormat;
 import com.sk89q.worldguard.protection.managers.RegionManager;
+import com.sk89q.worldguard.protection.regions.ClaimType;
 import com.sk89q.worldguard.protection.regions.GlobalProtectedRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
@@ -71,9 +73,16 @@ public class ClaimCommands {
         this.plugin = plugin;
     }
     
-    @Command(aliases = {"new", "n"}, usage = "<cuboid_name>",
+    
+    /**
+     * Claim new land.
+     * <p />
+     * Anyone with worldguard.claim.newland permission can claim new land.
+     */
+    @Command(aliases = {"newland", "land", "nl"}, usage = "<cuboid_name>",
             desc = "Defines a new cuboid", min = 1, max = 1)
-    @CommandPermissions({"worldguard.claim.new"})
+    // for claiming new land
+    @CommandPermissions({"worldguard.claim.newland"})
     public void define(CommandContext args, CommandSender sender) throws CommandException {
         
         Player player = plugin.checkPlayer(sender);
@@ -82,23 +91,23 @@ public class ClaimCommands {
         String id = args.getString(0);
         
         if (!ProtectedRegion.isValidId(id)) {
-            throw new CommandException("Invalid cuboid name!");
+            throw new CommandException("Invalid landclaim name!");
         }
         
         if (id.equalsIgnoreCase("__global__")) {
-            throw new CommandException("A cuboid cannot be named __global__");
+            throw new CommandException("A landclaim cannot be named __global__");
         }
         
         // Attempt to get the player's selection from WorldEdit
         Selection sel = worldEdit.getSelection(player);
         
         if (sel == null) {
-            throw new CommandException("Select a cuboid with the wand first.");
+            throw new CommandException("Select some land with the wand (wood shovel) first.");
         }
         
         RegionManager mgr = plugin.getGlobalRegionManager().get(sel.getWorld());
         if (mgr.hasRegion(id)) {
-            throw new CommandException("That cuboid already exists. Please choose a different name (or use change to modify the existing one).");
+            throw new CommandException("That landclaim name already exists. Please choose a different name.  Perhaps you meant to modify an existing one?");
         }
         
         ProtectedRegion region;
@@ -110,89 +119,86 @@ public class ClaimCommands {
             region = new ProtectedCuboidRegion(id, min, max);
         } else {
             throw new CommandException(
-                    "You may only use cubish shaped cuboids.");
+                    "You may only have rectangular/square landclaims.");
         }
 
         WorldConfiguration wcfg = plugin.getGlobalStateManager().get(player.getWorld());
 
-        if (!plugin.hasPermission(sender, "worldguard.region.unlimited")) {
-            // Check whether the player has created too many regions
-            int maxRegionCount = wcfg.getMaxRegionCount(player);
-            if (maxRegionCount >= 0
-                    && mgr.getRegionCountOfPlayer(localPlayer) >= maxRegionCount) {
-                throw new CommandException("You own too many cuboids in this world, delete one first to claim a new one.");
-            }
+        // Check whether the player has created too many regions
+        int maxRegionCount = wcfg.getMaxRegionCount(player);
+        if (maxRegionCount >= 0
+                && mgr.getRegionCountOfPlayer(localPlayer) >= maxRegionCount) {
+            throw new CommandException("You own too many landclaims in this world, delete one in order claim a new one.");
         }
 
         ProtectedRegion existing = mgr.getRegionExact(id);
 
-        // Check for an existing region
-        // shouldn't need to do this since we checked earlier - Tulon
-        if (existing != null) {
-            throw new CommandException("This cuboid already exists.  Please choose a different name.");
-        }
-
-        // expand region to maximum veritcal size
+        // expand region to maximum vertical size
         region.expandVert(wcfg.claimFloor, player.getWorld().getMaxHeight() - 1);
 
         ApplicableRegionSet regions = mgr.getApplicableRegions(region);
 
         // Check if this region overlaps any other region
-        if (regions.size() > 0) {
-            if (!regions.isOwnerOfAll(localPlayer, wcfg.claimIgnoreNegPriority)) {
-                Iterator<ProtectedRegion> it = regions.iterator();
-                StringBuilder errText = new StringBuilder("This cuboid overlaps with someone else's cuboid: ");
-                while (it.hasNext()) {
-                    ProtectedRegion r = it.next();
-                    if (!r.isOwner(localPlayer)) {
-                        errText.append(r.getId());
-                    }
-                }
-                throw new CommandException(errText.toString());
-            }
-        }
+        checkForOverlap(regions, wcfg, localPlayer);
 
         // check if the new region is too close to other regions
-        ProtectedRegion regionWithBorder = new ProtectedCuboidRegion(id + "WithBorder", region.getMinimumPoint(), region.getMaximumPoint());
-        regionWithBorder.expandArea(wcfg.claimBorder);
-        ApplicableRegionSet regionsWithBorder = mgr.getApplicableRegions(regionWithBorder);
-        if (regionsWithBorder.size() > 0) {
-            if (!regionsWithBorder.isOwnerOfAll(localPlayer, wcfg.claimIgnoreNegPriority)) {
-                Iterator<ProtectedRegion> it = regionsWithBorder.iterator();
-                StringBuilder errText = new StringBuilder("This cuboid is too close to someone else's cuboid: ");
-                while (it.hasNext()) {
-                    ProtectedRegion r = it.next();
-                    if (!r.isOwner(localPlayer)) {
-                        errText.append(r.getId());
-                    }
-                }
-                throw new CommandException(errText.toString());
-            }
-        }
+        checkForOverlapBorder(id, region, mgr, wcfg, localPlayer);
 
-        if (!plugin.hasPermission(sender, "worldguard.region.unlimited")) {
-            if (region.area() > wcfg.maxClaimArea) {
-                player.sendMessage(ChatColor.RED +
-                        "This cuboid is too large to claim.");
-                player.sendMessage(ChatColor.RED +
-                        "Max. area: " + wcfg.maxClaimArea + ", your area: " + region.area());
-            }
+        if (region.area() > wcfg.maxClaimArea) {
+            player.sendMessage(ChatColor.RED +
+                    "This land area is too large to claim.");
+            player.sendMessage(ChatColor.RED +
+                    "Max. area: " + wcfg.maxClaimArea + ", your area: " + region.area());
         }
         
+        // set player as owner
         region.getOwners().addPlayer(player.getName());
-        mgr.addRegion(region);
 
+        // set claim type
+        region.setClaimType(ClaimType.LAND);
+
+        // set flags
+        region.setFlag((StateFlag)getFlag("vehicle-place"), StateFlag.State.ALLOW);
+        region.setFlag((StateFlag)getFlag("creeper-explosion"), StateFlag.State.DENY);
+        region.setFlag((StateFlag)getFlag("ghast-fireball"), StateFlag.State.DENY);
+
+        // save region
+        mgr.addRegion(region);
         try {
             mgr.save();
-            sender.sendMessage(ChatColor.YELLOW + "Cuboid saved as " + id + ".");
+            sender.sendMessage(ChatColor.YELLOW + "Landclaim saved as " + id + ".");
         } catch (ProtectionDatabaseException e) {
-            throw new CommandException("Failed to write cuboid: "
+            throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
         }
     }
+
+    /**
+     * Get the flag.
+     * <p />
+     * Since sk89q doesn't have a way to get a known flag - have to search
+     * for it.
+     *
+     * @param flagName the flag name
+     * @return the flag object
+     */
+    private Flag<?> getFlag(String flagName) {
+        for (Flag<?> flag : DefaultFlag.getFlags()) {
+            if (flag.getName().equalsIgnoreCase(flagName)) {
+                return flag;
+            }
+        }
+
+        return null;
+    }
     
-    @Command(aliases = {"change", "update", "expand", "contract"}, usage = "<id>",
-            desc = "Changes the size of a cuboid", min = 1, max = 1)
+    /**
+     * Change size of owned landclaim.
+     * <p />
+     * Only the owner may change the size of a landclaim (or region).
+     */
+    @Command(aliases = {"change", "update", "changesize", "expand"}, usage = "<id>",
+            desc = "Changes the size of an owned landclaim", min = 1, max = 1)
     public void change(CommandContext args, CommandSender sender) throws CommandException {
         
         Player player = plugin.checkPlayer(sender);
@@ -202,29 +208,27 @@ public class ClaimCommands {
         String id = args.getString(0);
         
         if (id.equalsIgnoreCase("__global__")) {
-            throw new CommandException("You may not change the __global__ cuboid.");
+            throw new CommandException("You may not change the __global__ landclaim.");
         }
 
         RegionManager mgr = plugin.getGlobalRegionManager().get(world);
         ProtectedRegion existing = mgr.getRegionExact(id);
 
         if (existing == null) {
-            throw new CommandException("Could not find a cuboid named: " + id);
+            throw new CommandException("Could not find landclaim named: " + id);
         }
 
-        if (existing.isOwner(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.claim.change.own");
-        } else if (existing.isMember(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.claim.change.member");
-        } else {
-            plugin.checkPermission(sender, "worldguard.claim.change");
+        // only onwers can change the size of their landclaim
+        // admin/moderators should use the regular region commands
+        if (!existing.isOwner(localPlayer)) {
+            throw new CommandException("You are not the owner of this landclaim (" + id + ").  Only the owner may change the size.");
         } 
         
         // Attempt to get the player's selection from WorldEdit
         Selection sel = worldEdit.getSelection(player);
         
-        if (sel == null) { // TODO
-            throw new CommandException("First, select a cuboid with the wand or the select command.");
+        if (sel == null) {
+            throw new CommandException("Select some land with the wand (wood shovel) first.  Ideally, this should include your original landclaim area.");
         }
         
         ProtectedRegion region;
@@ -236,32 +240,60 @@ public class ClaimCommands {
             region = new ProtectedCuboidRegion(id, min, max);
         } else {
             throw new CommandException(
-                    "You may only use cubish shaped cuboids.");
+                    "You may only have rectangular/square landclaims.");
         }
 
+        WorldConfiguration wcfg = plugin.getGlobalStateManager().get(player.getWorld());
+
+        // expand region to maximum vertical size
+        region.expandVert(wcfg.claimFloor, player.getWorld().getMaxHeight() - 1);
+
+        ApplicableRegionSet regions = mgr.getApplicableRegions(region);
+
+        // Check if this region overlaps any other region
+        checkForOverlap(regions, wcfg, localPlayer);
+
+        // check if the new region is too close to other regions
+        checkForOverlapBorder(id, region, mgr, wcfg, localPlayer);
+
+        if (region.area() > wcfg.maxClaimArea) {
+            player.sendMessage(ChatColor.RED +
+                    "This land area is too large to claim.");
+            player.sendMessage(ChatColor.RED +
+                    "Max. area: " + wcfg.maxClaimArea + ", your area: " + region.area());
+        }
+
+        // add data from previous landclaim definition
         region.setMembers(existing.getMembers());
         region.setOwners(existing.getOwners());
         region.setFlags(existing.getFlags());
         region.setPriority(existing.getPriority());
+        region.setClaimType(existing.getClaimType());
         try {
             region.setParent(existing.getParent());
         } catch (CircularInheritanceException ignore) {
         }
         
+        // update landclaim
         mgr.addRegion(region);
-        
-        sender.sendMessage(ChatColor.YELLOW + "Cuboid " + region.getId() + " updated with new area.");
+        sender.sendMessage(ChatColor.YELLOW + "Landclaim " + region.getId() + " updated with new land area.");
         
         try {
             mgr.save();
+            sender.sendMessage(ChatColor.YELLOW + "Landclaim saved as " + id + ".");
         } catch (ProtectionDatabaseException e) {
-            throw new CommandException("Failed to write cuboid: "
+            throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
         }
     }
     
-    @Command(aliases = {"select", "sel", "s"}, usage = "[id]",
-            desc = "Select a cuboid", min = 0, max = 1)
+    /**
+     * Select an existing landclaim.
+     * <p />
+     * Anyone may select an existing landclaim (or region).
+     */
+    @Command(aliases = {"select", "sel", "s", "choose"}, usage = "[id]",
+            desc = "Select an existing landclaim", min = 0, max = 1)
     public void select(CommandContext args, CommandSender sender) throws CommandException {
 
         final Player player = plugin.checkPlayer(sender);
@@ -269,16 +301,11 @@ public class ClaimCommands {
         final LocalPlayer localPlayer = plugin.wrapPlayer(player);
 
         final RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+        WorldConfiguration wcfg = plugin.getGlobalStateManager().get(world);
 
         final String id;
         if (args.argsLength() == 0) {
-            final Vector pt = localPlayer.getPosition();
-            final ApplicableRegionSet set = mgr.getApplicableRegions(pt);
-            if (set.size() == 0) {
-                throw new CommandException("You didn't specify a cuboid name and no region exists at this location!");
-            }
-
-            id = set.iterator().next().getId();
+            id = findRegionPlayerPos(localPlayer, wcfg, mgr);
         }
         else {
             id = args.getString(0);
@@ -287,41 +314,20 @@ public class ClaimCommands {
         final ProtectedRegion region = mgr.getRegion(id);
 
         if (region == null) {
-            throw new CommandException("Could not find a cuboid with that name.");
+            throw new CommandException("Could not find landclaim named: " + id);
         }
 
         selectRegion(player, localPlayer, region);
     }
-
-    public void selectRegion(Player player, LocalPlayer localPlayer, ProtectedRegion region) throws CommandException, CommandPermissionsException {
-        final WorldEditPlugin worldEdit = plugin.getWorldEdit();
-        final String id = region.getId();
-
-        if (region.isOwner(localPlayer)) {
-            plugin.checkPermission(player, "worldguard.claim.select.own." + id.toLowerCase());
-        } else if (region.isMember(localPlayer)) {
-            plugin.checkPermission(player, "worldguard.claim.select.member." + id.toLowerCase());
-        } else {
-            plugin.checkPermission(player, "worldguard.claim.select." + id.toLowerCase());
-        }
-
-        final World world = player.getWorld();
-        if (region instanceof ProtectedCuboidRegion) {
-            final ProtectedCuboidRegion cuboid = (ProtectedCuboidRegion) region;
-            final Vector pt1 = cuboid.getMinimumPoint();
-            final Vector pt2 = cuboid.getMaximumPoint();
-            final CuboidSelection selection = new CuboidSelection(world, pt1, pt2);
-            worldEdit.setSelection(player, selection);
-            player.sendMessage(ChatColor.YELLOW + "Selected " + region.getId() + " as a cuboid.");
-        } else if (region instanceof GlobalProtectedRegion) {
-            throw new CommandException("You may not select global regions.");
-        } else {
-            throw new CommandException("Unknown region type: " + region.getClass().getCanonicalName());
-        }
-    }
-
+    
+    /**
+     * Get information about an existing landclaim.
+     * <p />
+     * Anyone may get information about an existing landclaim.
+     * Must be claim type: land.
+     */
     @Command(aliases = {"info", "i"}, usage = "[world] [id]", flags = "s",
-            desc = "Get information about a cuboid", min = 0, max = 2)
+            desc = "Get information about a landclaim", min = 0, max = 2)
     public void info(CommandContext args, CommandSender sender) throws CommandException {
 
         final LocalPlayer localPlayer;
@@ -338,6 +344,7 @@ public class ClaimCommands {
         }
 
         final RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+        WorldConfiguration wcfg = plugin.getGlobalStateManager().get(world);
 
         final String id;
 
@@ -348,13 +355,7 @@ public class ClaimCommands {
                 throw new CommandException("A player is expected.");
             }
 
-            final Vector pt = localPlayer.getPosition();
-            final ApplicableRegionSet set = mgr.getApplicableRegions(pt);
-            if (set.size() == 0) {
-                throw new CommandException("No region ID specified and no region found at current location!");
-            }
-
-            id = set.iterator().next().getId();
+            id = findRegionPlayerPos(localPlayer, wcfg, mgr);
             break;
 
         case 1:
@@ -369,9 +370,9 @@ public class ClaimCommands {
 
         if (region == null) {
             if (!ProtectedRegion.isValidId(id)) {
-                throw new CommandException("Invalid region ID specified!");
+                throw new CommandException("Invalid landclaim name!");
             }
-            throw new CommandException("A region with ID '" + id + "' doesn't exist.");
+            throw new CommandException("Could not find landclaim named: " + id);
         }
 
         displayRegionInfo(sender, localPlayer, region);
@@ -381,20 +382,14 @@ public class ClaimCommands {
         }
     }
 
-    public void displayRegionInfo(CommandSender sender, final LocalPlayer localPlayer, ProtectedRegion region) throws CommandPermissionsException {
-        if (localPlayer == null) {
-            plugin.checkPermission(sender, "worldguard.region.info");
-        } else if (region.isOwner(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.region.info.own");
-        } else if (region.isMember(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.region.info.member");
-        } else {
-            plugin.checkPermission(sender, "worldguard.region.info");
-        }
-
+    private void displayRegionInfo(CommandSender sender, final LocalPlayer localPlayer, ProtectedRegion region) throws CommandException {
         final String id = region.getId();
 
-        sender.sendMessage(ChatColor.YELLOW + "Region: " + id + ChatColor.GRAY + ", type: " + region.getTypeName() + ", " + ChatColor.BLUE + "Priority: " + region.getPriority());
+        if (region.getClaimType() != ClaimType.LAND) {
+            throw new CommandException("The name " + id + " does not refer to a land claim type region.");
+        }
+
+        sender.sendMessage(ChatColor.YELLOW + "Landclaim: " + id + ChatColor.GRAY + ", claim: " + region.getClaimType() + ChatColor.GRAY + ", type: " + region.getTypeName() + ", " + ChatColor.GRAY + "Priority: " + region.getPriority());
 
         boolean hasFlags = false;
         final StringBuilder s = new StringBuilder(ChatColor.BLUE + "Flags: ");
@@ -432,283 +427,80 @@ public class ClaimCommands {
 
         final BlockVector min = region.getMinimumPoint();
         final BlockVector max = region.getMaximumPoint();
+        sender.sendMessage(ChatColor.LIGHT_PURPLE + "Area: " + region.xLength() + " x " + region.zLength() + ", Size: " + region.area());
         sender.sendMessage(ChatColor.LIGHT_PURPLE + "Bounds:"
                 + " (" + min.getBlockX() + "," + min.getBlockY() + "," + min.getBlockZ() + ")"
                 + " (" + max.getBlockX() + "," + max.getBlockY() + "," + max.getBlockZ() + ")"
         );
     }
 
-    public class RegionEntry implements Comparable<RegionEntry>{
-        private final String id;
-        private final int index;
-        private boolean isOwner;
-        private boolean isMember;
-
-        public RegionEntry(String id, int index) {
-            this.id = id;
-            this.index = index;
-        }
-
-        @Override
-        public int compareTo(RegionEntry o) {
-            if (isOwner != o.isOwner) {
-                return isOwner ? 1 : -1;
-            }
-            if (isMember != o.isMember) {
-                return isMember ? 1 : -1;
-            }
-            return id.compareTo(o.id);
-        }
-
-        @Override
-        public String toString() {
-            if (isOwner) {
-                return (index + 1) + ". +" + id;
-            } else if (isMember) {
-                return (index + 1) + ". -" + id;
-            } else {
-                return (index + 1) + ". " + id;
-            }
-        }
-    }
-
-    @Command(aliases = {"list"}, usage = "[.player] [page] [world]",
-            desc = "Get a list of regions", max = 3)
-    //@CommandPermissions({"worldguard.region.list"})
+    /**
+     * Get a list of landclaims the player owns.
+     */
+    @Command(aliases = {"list", "owned", "lo"}, usage = "[page] [world]",
+            desc = "Get a list of owned landclaims", max = 2)
     public void list(CommandContext args, CommandSender sender) throws CommandException {
 
-        World world;
+        String name = sender.getName().toLowerCase();
+        LocalPlayer localPlayer = plugin.wrapPlayer(plugin.checkPlayer(sender));
+
         int page = 0;
-        int argOffset = 0;
-        String name = "";
-        boolean own = false;
-        LocalPlayer localPlayer = null;
+        World world = null;
 
-        final String senderName = sender.getName().toLowerCase();
-        if (args.argsLength() > 0 && args.getString(0).startsWith(".")) {
-            name = args.getString(0).substring(1).toLowerCase();
-            argOffset = 1;
+        if (args.argsLength() > 0) {
+            try {
+                page = Math.max(0, (args.getInteger(0) - 1));
+            } catch (NumberFormatException nfe) {
+                world = plugin.matchWorld(sender, args.getString(0));
+            }
 
-            if (name.equals("me") || name.isEmpty() || name.equals(senderName)) {
-                own = true;
+            if (args.argsLength() == 2) {
+                if (page == 0) {
+                    page = Math.max(0, args.getInteger(1) - 1);
+                } else if (world == null) {
+                    world = plugin.matchWorld(sender, args.getString(1));
+                }
             }
         }
 
-        // Make /rg list default to "own" mode if the "worldguard.region.list" permission is not given
-        if (!own && !plugin.hasPermission(sender, "worldguard.region.list")) {
-            own = true;
-        }
-
-        if (own) {
-            plugin.checkPermission(sender, "worldguard.region.list.own");
-            name = senderName;
-            localPlayer = plugin.wrapPlayer(plugin.checkPlayer(sender));
-        }
-
-        if (args.argsLength() > argOffset) {
-            page = Math.max(0, args.getInteger(argOffset) - 1);
-        }
-
-        if (args.argsLength() > 1 + argOffset) {
-            world = plugin.matchWorld(sender, args.getString(1 + argOffset));
-        } else {
+        if (world == null) {
             world = plugin.checkPlayer(sender).getWorld();
         }
 
         final RegionManager mgr = plugin.getGlobalRegionManager().get(world);
         final Map<String, ProtectedRegion> regions = mgr.getRegions();
 
-        List<RegionEntry> regionEntries = new ArrayList<RegionEntry>();
-        int index = 0;
+        List<ProtectedRegion> regionsOwned = new ArrayList<ProtectedRegion>();
         for (String id : regions.keySet()) {
-            RegionEntry entry = new RegionEntry(id, index++);
-            if (!name.isEmpty()) {
-                if (own) {
-                    entry.isOwner = regions.get(id).isOwner(localPlayer);
-                    entry.isMember = regions.get(id).isMember(localPlayer);
-                }
-                else {
-                    entry.isOwner = regions.get(id).isOwner(name);
-                    entry.isMember = regions.get(id).isMember(name);
-                }
-
-                if (!entry.isOwner && !entry.isMember) {
-                    continue;
-                }
-            }
-
-            regionEntries.add(entry);
-        }
-
-        Collections.sort(regionEntries);
-
-        final int totalSize = regionEntries.size();
-        final int pageSize = 10;
-        final int pages = (int) Math.ceil(totalSize / (float) pageSize);
-
-        sender.sendMessage(ChatColor.RED
-                + (name.equals("") ? "Regions (page " : "Regions for " + name + " (page ")
-                + (page + 1) + " of " + pages + "):");
-
-        if (page < pages) {
-            for (int i = page * pageSize; i < page * pageSize + pageSize; i++) {
-                if (i >= totalSize) {
-                    break;
-                }
-                sender.sendMessage(ChatColor.YELLOW.toString() + regionEntries.get(i));
-            }
-        }
-    }
-
-    @Command(aliases = {"flag", "f"}, usage = "<id> <flag> [-g group] [value]", flags = "g:",
-            desc = "Set flags", min = 2)
-    public void flag(CommandContext args, CommandSender sender) throws CommandException {
-        
-        Player player = plugin.checkPlayer(sender);
-        World world = player.getWorld();
-        LocalPlayer localPlayer = plugin.wrapPlayer(player);
-        
-        String id = args.getString(0);
-        String flagName = args.getString(1);
-        String value = null;
-
-        if (args.argsLength() >= 3) {
-            value = args.getJoinedStrings(2);
-        }
-
-        RegionManager mgr = plugin.getGlobalRegionManager().get(world);
-        ProtectedRegion region = mgr.getRegion(id);
-
-        if (region == null) {
-            if (id.equalsIgnoreCase("__global__")) {
-                region = new GlobalProtectedRegion(id);
-                mgr.addRegion(region);
-            } else {
-                throw new CommandException("Could not find a region by that ID.");
+            ProtectedRegion region = regions.get(id);
+            if ((region.getClaimType() == ClaimType.LAND) && region.isOwner(localPlayer)) { 
+                regionsOwned.add(region);
             }
         }
 
-        // @TODO deprecate "flag.[own./member./blank]"
-        boolean hasPerm = false;
-        if (region.isOwner(localPlayer)) {
-            if (plugin.hasPermission(sender, "worldguard.region.flag.own." + id.toLowerCase())) hasPerm = true;
-            else if (plugin.hasPermission(sender, "worldguard.region.flag.regions.own." + id.toLowerCase())) hasPerm = true;
-        } else if (region.isMember(localPlayer)) {
-            if (plugin.hasPermission(sender, "worldguard.region.flag.member." + id.toLowerCase())) hasPerm = true;
-            else if (plugin.hasPermission(sender, "worldguard.region.flag.regions.member." + id.toLowerCase())) hasPerm = true;
+        Collections.sort(regionsOwned);
+
+        final int totalSize = regionsOwned.size();
+        if (totalSize == 0) {
+            sender.sendMessage(ChatColor.RED + "No landclaims owned in world " + world.getName());
         } else {
-            if (plugin.hasPermission(sender, "worldguard.region.flag." + id.toLowerCase())) hasPerm = true;
-            else if (plugin.hasPermission(sender, "worldguard.region.flag.regions." + id.toLowerCase())) hasPerm = true;
-        }
-        if (!hasPerm) throw new CommandPermissionsException();
-        
-        Flag<?> foundFlag = null;
-        
-        // Now time to find the flag!
-        for (Flag<?> flag : DefaultFlag.getFlags()) {
-            // Try to detect the flag
-            if (flag.getName().replace("-", "").equalsIgnoreCase(flagName.replace("-", ""))) {
-                foundFlag = flag;
-                break;
-            }
-        }
-        
-        if (foundFlag == null) {
-            StringBuilder list = new StringBuilder();
-            
-            // Need to build a list
-            for (Flag<?> flag : DefaultFlag.getFlags()) {
-                if (list.length() > 0) {
-                    list.append(", ");
+            final int pageSize = 10;
+            final int pages = (int) Math.ceil(totalSize / (float) pageSize);
+
+            sender.sendMessage(ChatColor.RED + "Landclaims Owned in World " + world.getName() + " (page " + (page + 1) + " of " + pages + "):");
+
+            if (page < pages) {
+                for (int i = page * pageSize; i < page * pageSize + pageSize; i++) {
+                    if (i >= totalSize) {
+                        break;
+                    }
+                    sender.sendMessage(ChatColor.YELLOW.toString() + regionsOwned.get(i).getId());
                 }
-
-                // @TODO deprecate inconsistant "owner" permission
-                if (region.isOwner(localPlayer)) {
-                    if (!plugin.hasPermission(sender, "worldguard.region.flag.flags."
-                            + flag.getName() + ".owner." + id.toLowerCase())
-                            && !plugin.hasPermission(sender, "worldguard.region.flag.flags."
-                                    + flag.getName() + ".own." + id.toLowerCase())) {
-                        continue;
-                    }
-                } else if (region.isMember(localPlayer)) {
-                    if (!plugin.hasPermission(sender, "worldguard.region.flag.flags."
-                            + flag.getName() + ".member." + id.toLowerCase())) {
-                        continue;
-                    }
-                } else {
-                    if (!plugin.hasPermission(sender, "worldguard.region.flag.flags."
-                                + flag.getName() + "." + id.toLowerCase())) {
-                        continue;
-                    }
-                } 
-                
-                list.append(flag.getName());
             }
-
-            player.sendMessage(ChatColor.RED + "Unknown flag specified: " + flagName);
-            player.sendMessage(ChatColor.RED + "Available flags: " + list);
-            return;
-        }
-
-        if (region.isOwner(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.region.flag.flags."
-                    + foundFlag.getName() + ".owner." + id.toLowerCase());
-        } else if (region.isMember(localPlayer)) {
-            plugin.checkPermission(sender, "worldguard.region.flag.flags."
-                    + foundFlag.getName() + ".member." + id.toLowerCase());
-        } else {
-            plugin.checkPermission(sender, "worldguard.region.flag.flags."
-                    + foundFlag.getName() + "." + id.toLowerCase());
-        }
-
-        if (args.hasFlag('g')) {
-            String group = args.getFlag('g');
-            if (foundFlag.getRegionGroupFlag() == null) {
-                throw new CommandException("Region flag '" + foundFlag.getName()
-                        + "' does not have a group flag!");
-            }
-
-            try {
-                setFlag(region, foundFlag.getRegionGroupFlag(), sender, group);
-            } catch (InvalidFlagFormat e) {
-                throw new CommandException(e.getMessage());
-            }
-
-            sender.sendMessage(ChatColor.YELLOW
-                    + "Region group flag for '" + foundFlag.getName() + "' set.");
-        } else {
-            if (value != null) {
-                try {
-                    setFlag(region, foundFlag, sender, value);
-                } catch (InvalidFlagFormat e) {
-                    throw new CommandException(e.getMessage());
-                }
-
-                sender.sendMessage(ChatColor.YELLOW
-                        + "Region flag '" + foundFlag.getName() + "' set.");
-            } else {
-                // Clear the flag
-                region.setFlag(foundFlag, null);
-
-                sender.sendMessage(ChatColor.YELLOW
-                        + "Region flag '" + foundFlag.getName() + "' cleared.");
-            }
-        }
-        
-        try {
-            mgr.save();
-        } catch (ProtectionDatabaseException e) {
-            throw new CommandException("Failed to write regions: "
-                    + e.getMessage());
         }
     }
     
-    public <V> void setFlag(ProtectedRegion region,
-            Flag<V> flag, CommandSender sender, String value)
-                throws InvalidFlagFormat {
-        region.setFlag(flag, flag.parseInput(plugin, sender, value));
-    }
-    
+/** - TODO
     @Command(aliases = {"remove", "delete", "del", "rem"}, usage = "<id>",
             desc = "Remove a region", min = 1, max = 1)
     public void remove(CommandContext args, CommandSender sender) throws CommandException {
@@ -745,5 +537,93 @@ public class ClaimCommands {
             throw new CommandException("Failed to write regions: "
                     + e.getMessage());
         }
+    }
+*/
+
+    private void selectRegion(Player player, LocalPlayer localPlayer, ProtectedRegion region) throws CommandException {
+        final WorldEditPlugin worldEdit = plugin.getWorldEdit();
+        final String id = region.getId();
+
+        final World world = player.getWorld();
+        if (region instanceof ProtectedCuboidRegion) {
+            final ProtectedCuboidRegion cuboid = (ProtectedCuboidRegion) region;
+            final Vector pt1 = cuboid.getMinimumPoint();
+            final Vector pt2 = cuboid.getMaximumPoint();
+            final CuboidSelection selection = new CuboidSelection(world, pt1, pt2);
+            worldEdit.setSelection(player, selection);
+            player.sendMessage(ChatColor.YELLOW + "Selected " + region.getId() + " as a landclaim.");
+        } else if (region instanceof GlobalProtectedRegion) {
+            throw new CommandException("You may not select global regions.");
+        } else {
+            throw new CommandException("Unknown region type: " + region.getClass().getCanonicalName());
+        }
+    }
+
+    private <V> void setFlag(ProtectedRegion region, Flag<V> flag, CommandSender sender, String value) throws InvalidFlagFormat {
+        region.setFlag(flag, flag.parseInput(plugin, sender, value));
+    }
+
+    private void checkForOverlap(ApplicableRegionSet regions, WorldConfiguration wcfg, LocalPlayer localPlayer) throws CommandException {
+        // Check if this region overlaps any other region
+        if (regions.size() > 0) {
+            if (!regions.isOwnerOfAll(localPlayer, wcfg.claimIgnoreNegPriority)) {
+                Iterator<ProtectedRegion> it = regions.iterator();
+                StringBuilder errText = new StringBuilder("This land overlaps with someone else's land: ");
+                while (it.hasNext()) {
+                    ProtectedRegion r = it.next();
+                    if (!r.isOwner(localPlayer)) {
+                        errText.append(r.getId());
+                    }
+                }
+                throw new CommandException(errText.toString());
+            }
+        }
+    }
+
+    private void checkForOverlapBorder(String id, ProtectedRegion region, RegionManager mgr, WorldConfiguration wcfg, LocalPlayer localPlayer) throws CommandException {
+        ProtectedRegion regionWithBorder = new ProtectedCuboidRegion(id + "WithBorder", region.getMinimumPoint(), region.getMaximumPoint());
+        regionWithBorder.expandArea(wcfg.claimBorder);
+        ApplicableRegionSet regionsWithBorder = mgr.getApplicableRegions(regionWithBorder);
+        if (regionsWithBorder.size() > 0) {
+            if (!regionsWithBorder.isOwnerOfAll(localPlayer, wcfg.claimIgnoreNegPriority)) {
+                Iterator<ProtectedRegion> it = regionsWithBorder.iterator();
+                StringBuilder errText = new StringBuilder("This land is too close to someone else's land: ");
+                while (it.hasNext()) {
+                    ProtectedRegion r = it.next();
+                    if (!r.isOwner(localPlayer)) {
+                        errText.append(r.getId());
+                    }
+                }
+                throw new CommandException(errText.toString());
+            }
+        }
+    }
+
+    /**
+     * Find a region where the player is located.
+     *
+     * @param localPlayer the local player
+     * @return the region id
+     */
+    private String findRegionPlayerPos(LocalPlayer localPlayer, WorldConfiguration wcfg, RegionManager mgr) throws CommandException {
+        final Vector pt = localPlayer.getPosition();
+        final ApplicableRegionSet set = mgr.getApplicableRegions(pt);
+
+        // get rid of any "world" cuboids
+        Iterator<ProtectedRegion> it = set.iterator();
+        if (wcfg.claimIgnoreNegPriority) {
+            while (it.hasNext()) {
+                if (it.next().getPriority() < 0) {
+                    it.remove();
+                }
+            }
+        }
+
+        if (set.size() == 0) {
+            throw new CommandException("You didn't specify a landclaim name and no landclaim exists at this location!");
+        }
+
+        // get the next region in the list
+        return set.iterator().next().getId();
     }
 }

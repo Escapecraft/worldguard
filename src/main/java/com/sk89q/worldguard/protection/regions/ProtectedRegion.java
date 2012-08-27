@@ -56,6 +56,11 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     private int priority = 0;
 
     /**
+     * Land type.
+     */
+    private ClaimType claimType;
+
+    /**
      * Holds the curParent.
      */
     private ProtectedRegion parent;
@@ -125,6 +130,24 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
+     * Gets the claim type of this region.
+     *
+     * @return the claim type
+     */
+    public ClaimType getClaimType() {
+        return claimType;
+    }
+
+    /**
+     * Sets the claim type of this region.
+     *
+     * @param type the claim type
+     */
+    public void setClaimType(ClaimType type) {
+        claimType = type;
+    }
+
+    /**
      * Get the lower point of the cuboid.
      *
      * @return min point
@@ -171,7 +194,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param priority the priority to setFlag
+     * @param priority the priority to set
      */
     public void setPriority(int priority) {
         this.priority = priority;
@@ -188,7 +211,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
      * Set the curParent. This checks to make sure that it will not result
      * in circular inheritance.
      *
-     * @param parent the curParent to setFlag
+     * @param parent the curParent to set
      * @throws CircularInheritanceException when circular inheritance is detected
      */
     public void setParent(ProtectedRegion parent) throws CircularInheritanceException {
@@ -222,7 +245,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param owners the owners to setFlag
+     * @param owners the owners to set
      */
     public void setOwners(DefaultDomain owners) {
         this.owners = owners;
@@ -236,7 +259,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param members the members to setFlag
+     * @param members the members to set
      */
     public void setMembers(DefaultDomain members) {
         this.members = members;
@@ -432,18 +455,32 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * Gets the 2D points for this region
+     * Gets the 2D points for this region.
      *
      * @return The points for this region as (x, z) coordinates
      */
     public abstract List<BlockVector2D> getPoints();
 
     /**
-     * Get the number of blocks in this region
+     * Get the number of blocks in this region.
      *
-     * @return the area of this region in blocks
+     * @return the area of this region, in blocks
      */
     public abstract int area();
+
+    /**
+     * Get the x length, in blocks, of this region.
+     *
+     * @return the x length of the region, in blocks
+     */
+    public abstract int xLength();
+
+    /**
+     * Get the z length, in blocks, of this region.
+     *
+     * @return the z length of the region, in blocks
+     */
+    public abstract int zLength();
 
     /**
      * Get the number of blocks in this region
