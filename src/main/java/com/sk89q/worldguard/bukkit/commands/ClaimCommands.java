@@ -81,7 +81,6 @@ public class ClaimCommands {
      */
     @Command(aliases = {"newland", "land", "nl"}, usage = "<landclaim_name>",
             desc = "Defines a new landclaim", min = 1, max = 1)
-    // for claiming new land
     @CommandPermissions({"worldguard.claim.newland"})
     public void define(CommandContext args, CommandSender sender) throws CommandException {
         
@@ -230,6 +229,7 @@ public class ClaimCommands {
      * Change size of owned landclaim.
      * <p />
      * Only the owner may change the size of a landclaim (or region).
+     * TODO - don't allow size changes to towns
      */
     @Command(aliases = {"change", "update", "changesize", "expand"}, usage = "<landclaim_name>",
             desc = "Changes the size of an owned landclaim", min = 1, max = 1)
@@ -358,7 +358,7 @@ public class ClaimCommands {
      * Get information about an existing landclaim.
      * <p />
      * Anyone may get information about an existing landclaim.
-     * Must be claim type: land.
+     * Must be claim type: land or town.
      */
     @Command(aliases = {"info", "i"}, usage = "[world] [landclaim_name]", flags = "s",
             desc = "Get information about a landclaim", min = 0, max = 2)
@@ -419,7 +419,7 @@ public class ClaimCommands {
     private void displayRegionInfo(CommandSender sender, final LocalPlayer localPlayer, ProtectedRegion region) throws CommandException {
         final String id = region.getId();
 
-        if (region.getClaimType() != ClaimType.LAND) {
+        if (region.getClaimType() != ClaimType.LAND && region.getClaimType() != ClaimType.TOWN) {
             throw new CommandException("The name " + id + " does not refer to a land claim type region.");
         }
 
@@ -469,7 +469,7 @@ public class ClaimCommands {
     }
 
     /**
-     * Get a list of landclaims the player owns.
+     * Get a list of landclaims (both land and town) the player owns.
      */
     @Command(aliases = {"list", "owned", "lo"}, usage = "[page] [world]",
             desc = "Get a list of owned landclaims", max = 2)
@@ -507,7 +507,7 @@ public class ClaimCommands {
         List<ProtectedRegion> regionsOwned = new ArrayList<ProtectedRegion>();
         for (String id : regions.keySet()) {
             ProtectedRegion region = regions.get(id);
-            if ((region.getClaimType() == ClaimType.LAND) && region.isOwner(localPlayer)) { 
+            if (((region.getClaimType() == ClaimType.LAND) || (region.getClaimType() == ClaimType.TOWN)) && region.isOwner(localPlayer)) { 
                 regionsOwned.add(region);
             }
         }
@@ -533,7 +533,54 @@ public class ClaimCommands {
             }
         }
     }
+
+    /**
+     * Transfer landclaim to another player.
+     * <p />
+     * This will initiate the landclaim transfer.  The other player must accept.
+     */
+/*
+    @Command(aliases = {"transfer", "xfer", "give"}, usage = "<landclaim_name> <new_owner>",
+            desc = "Remove an owned landclaim", min = 2, max = 2)
+    public void transfer(CommandContext args, CommandSender sender) throws CommandException {
+
+        Player player = plugin.checkPlayer(sender);
+        World world = player.getWorld();
+        LocalPlayer localPlayer = plugin.wrapPlayer(player);
+        String id = args.getString(0);
+        
+        if (id.equalsIgnoreCase("__global__")) {
+            throw new CommandException("You may not transfer the __global__ landclaim.");
+        }
+
+        RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+        ProtectedRegion region = mgr.getRegionExact(id);
+
+        if (region == null) {
+            throw new CommandException("Could not find landclaim named: " + id);
+        }
+
+        if (!region.isOwner(localPlayer)) {
+            throw new CommandException("You are not the owner of this landclaim (" + id + ").  Only the owner may transfer the landclaim.");
+        } 
+    }
+*/
+
+    /**
+     * Cancel landclaim transfer.
+     */
+
+    /**
+     * Accept or reject landclaim transfer.
+     */
     
+    /**
+     * Delete landclaim.
+     * <p />
+     * Only the owner may delete the landclaim.  The land itself is not changed,
+     * only the cuboid is removed.
+     * TODO An owner may not delete a landclaim that's part of a town.
+     */
     @Command(aliases = {"remove", "delete", "del", "rem"}, usage = "<landclaim_name>",
             desc = "Remove an owned landclaim", min = 1, max = 1)
     public void remove(CommandContext args, CommandSender sender) throws CommandException {
@@ -544,9 +591,9 @@ public class ClaimCommands {
         String id = args.getString(0);
         
         if (id.equalsIgnoreCase("__global__")) {
-            throw new CommandException("You may not change the __global__ landclaim.");
+            throw new CommandException("You may not delete the __global__ landclaim.");
         }
-        
+
         RegionManager mgr = plugin.getGlobalRegionManager().get(world);
         ProtectedRegion region = mgr.getRegionExact(id);
 
