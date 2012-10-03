@@ -19,7 +19,12 @@
 
 package com.sk89q.worldguard.bukkit.commands;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -68,6 +73,15 @@ import com.sk89q.worldguard.protection.databases.RegionDBUtil;
  */
 public class ClaimCommands {
     private final WorldGuardPlugin plugin;
+
+    // claim log
+    private static final String claimLogFileName = "claims.log";
+    private static final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final String addAction= "add";
+    private static final String remAction= "remove";
+    private static final String modAction= "modify";
+    private static final String fieldDelim = ";";
+    private static final String coordDelim = ",";
 
     public ClaimCommands(WorldGuardPlugin plugin) {
         this.plugin = plugin;
@@ -144,10 +158,7 @@ public class ClaimCommands {
         checkForOverlapBorder(id, region, mgr, wcfg, localPlayer);
 
         if (region.area() > wcfg.maxClaimArea) {
-            player.sendMessage(ChatColor.RED +
-                    "This land area is too large to claim.");
-            player.sendMessage(ChatColor.RED +
-                    "Max. area: " + wcfg.maxClaimArea + ", your area: " + region.area());
+            throw new CommandException("This land area is too large to claim." + System.getProperty("line.separator") + "Max. area: " + wcfg.maxClaimArea + ", your area: " + region.area());
         }
         
         // set player as owner
@@ -166,6 +177,7 @@ public class ClaimCommands {
         try {
             mgr.save();
             sender.sendMessage(ChatColor.YELLOW + "Landclaim saved as " + id + ".");
+            logClaimChange(addAction, player.getName(), player.getWorld().getName(), region, null);
         } catch (ProtectionDatabaseException e) {
             throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
@@ -218,6 +230,7 @@ public class ClaimCommands {
         try {
             mgr.save();
             sender.sendMessage(ChatColor.YELLOW + "Landclaim " + id + " updated.");
+            logClaimChange(modAction, player.getName(), player.getWorld().getName(), region, subCmd.toLowerCase() + args.getPaddedSlice(3, 0));
         } catch (ProtectionDatabaseException e) {
             throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
@@ -291,10 +304,7 @@ public class ClaimCommands {
         checkForOverlapBorder(id, region, mgr, wcfg, localPlayer);
 
         if (region.area() > wcfg.maxClaimArea) {
-            player.sendMessage(ChatColor.RED +
-                    "This land area is too large to claim.");
-            player.sendMessage(ChatColor.RED +
-                    "Max. area: " + wcfg.maxClaimArea + ", your area: " + region.area());
+            throw new CommandException("This land area is too large to claim." + System.getProperty("line.separator") + "Max. area: " + wcfg.maxClaimArea + ", your area: " + region.area());
         }
 
         // add data from previous landclaim definition
@@ -315,6 +325,7 @@ public class ClaimCommands {
         try {
             mgr.save();
             sender.sendMessage(ChatColor.YELLOW + "Landclaim saved as " + id + ".");
+            logClaimChange(modAction, player.getName(), player.getWorld().getName(), region, "changed size");
         } catch (ProtectionDatabaseException e) {
             throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
@@ -612,6 +623,7 @@ public class ClaimCommands {
         
         try {
             mgr.save();
+            logClaimChange(remAction, player.getName(), player.getWorld().getName(), region, null);
         } catch (ProtectionDatabaseException e) {
             throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
@@ -649,7 +661,11 @@ public class ClaimCommands {
                 StringBuilder errText = new StringBuilder("This land overlaps with someone else's land: ");
                 while (it.hasNext()) {
                     ProtectedRegion r = it.next();
+                    if (wcfg.claimIgnoreNegPriority && (r.getPriority() < 0)) {
+                        continue;
+                    }
                     if (!r.isOwner(localPlayer)) {
+                        errText.append(" ");
                         errText.append(r.getId());
                     }
                 }
@@ -658,6 +674,15 @@ public class ClaimCommands {
         }
     }
 
+    /**
+     * Check to see if a selection overlaps the border area of existing claims.
+     *
+     * @param id name of the new claim
+     * @param region region
+     * @param mgr region manager
+     * @param wcfg worldguard configuration
+     * @param localPlayer player requesting the claim
+     */
     private void checkForOverlapBorder(String id, ProtectedRegion region, RegionManager mgr, WorldConfiguration wcfg, LocalPlayer localPlayer) throws CommandException {
         ProtectedRegion regionWithBorder = new ProtectedCuboidRegion(id + "WithBorder", region.getMinimumPoint(), region.getMaximumPoint());
         regionWithBorder.expandArea(wcfg.claimBorder);
@@ -668,7 +693,11 @@ public class ClaimCommands {
                 StringBuilder errText = new StringBuilder("This land is too close to someone else's land: ");
                 while (it.hasNext()) {
                     ProtectedRegion r = it.next();
+                    if (wcfg.claimIgnoreNegPriority && (r.getPriority() < 0)) {
+                        continue;
+                    }
                     if (!r.isOwner(localPlayer)) {
+                        errText.append(" ");
                         errText.append(r.getId());
                     }
                 }
@@ -687,7 +716,7 @@ public class ClaimCommands {
         final Vector pt = localPlayer.getPosition();
         final ApplicableRegionSet set = mgr.getApplicableRegions(pt);
 
-        // get rid of any "world" cuboids
+        // handle any "world" cuboids
         Iterator<ProtectedRegion> it = set.iterator();
         if (wcfg.claimIgnoreNegPriority) {
             while (it.hasNext()) {
@@ -722,5 +751,67 @@ public class ClaimCommands {
         }
 
         return null;
+    }
+
+    /**
+     * Log a claim command that changes a region.
+     *
+     * @param action action performed
+     * @param player player name
+     * @param world world name
+     * @param region protected region object
+     * @param notes additional information (optional)
+     */
+    private void logClaimChange(String action, String player, String world, ProtectedRegion region, String notes) {
+        FileWriter writer = null;
+
+        try {
+            // open log file for append
+            writer = new FileWriter(new File(plugin.getDataFolder(), claimLogFileName), true);
+            // buffer this for better performance
+            BufferedWriter out = new BufferedWriter(writer);
+
+            Date date = new Date();
+            StringBuilder record = new StringBuilder(dateFormat.format(date));
+            record.append(fieldDelim);
+            record.append(action);
+            record.append(fieldDelim);
+            record.append(player);
+            record.append(fieldDelim);
+            record.append(region.getId());
+            record.append(fieldDelim);
+            record.append(world);
+            record.append(fieldDelim);
+            BlockVector min = region.getMinimumPoint();
+            record.append(min.getBlockX());
+            record.append(coordDelim);
+            record.append(min.getBlockY());
+            record.append(coordDelim);
+            record.append(min.getBlockZ());
+            record.append(fieldDelim);
+            BlockVector max = region.getMaximumPoint();
+            record.append(max.getBlockX());
+            record.append(coordDelim);
+            record.append(max.getBlockY());
+            record.append(coordDelim);
+            record.append(max.getBlockZ());
+            record.append(fieldDelim);
+            if (notes != null) {
+                record.append(notes);
+            }
+            out.write(record.toString());
+            out.newLine();
+
+            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (writer != null) {
+                try {
+                    writer.close();
+                } catch (IOException ignore) {
+                }
+            }
+        }
     }
 }
