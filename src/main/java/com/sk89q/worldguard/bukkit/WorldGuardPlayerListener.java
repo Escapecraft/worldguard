@@ -18,16 +18,18 @@
  */
 package com.sk89q.worldguard.bukkit;
 
-import static com.sk89q.worldguard.bukkit.BukkitUtil.toVector;
-
-import java.util.Iterator;
-import java.util.Set;
+import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.blocks.BlockID;
+import com.sk89q.worldedit.blocks.BlockType;
 import com.sk89q.worldedit.blocks.ItemID;
-import org.bukkit.ChatColor;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.World;
+import com.sk89q.worldguard.LocalPlayer;
+import com.sk89q.worldguard.blacklist.events.*;
+import com.sk89q.worldguard.bukkit.FlagStateManager.PlayerFlagState;
+import com.sk89q.worldguard.protection.ApplicableRegionSet;
+import com.sk89q.worldguard.protection.flags.DefaultFlag;
+import com.sk89q.worldguard.protection.managers.RegionManager;
+import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
@@ -37,44 +39,24 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
-import org.bukkit.event.player.PlayerBedEnterEvent;
-import org.bukkit.event.player.PlayerBucketEmptyEvent;
-import org.bukkit.event.player.PlayerBucketFillEvent;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerGameModeChangeEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerItemHeldEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerLoginEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerPickupItemEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.potion.Potion;
+import org.bukkit.potion.PotionEffect;
 
-import com.sk89q.worldedit.Vector;
-import com.sk89q.worldedit.blocks.BlockType;
-import com.sk89q.worldguard.LocalPlayer;
-import com.sk89q.worldguard.blacklist.events.BlockBreakBlacklistEvent;
-import com.sk89q.worldguard.blacklist.events.BlockInteractBlacklistEvent;
-import com.sk89q.worldguard.blacklist.events.BlockPlaceBlacklistEvent;
-import com.sk89q.worldguard.blacklist.events.ItemAcquireBlacklistEvent;
-import com.sk89q.worldguard.blacklist.events.ItemDropBlacklistEvent;
-import com.sk89q.worldguard.blacklist.events.ItemUseBlacklistEvent;
-import com.sk89q.worldguard.bukkit.FlagStateManager.PlayerFlagState;
-import com.sk89q.worldguard.protection.ApplicableRegionSet;
-import com.sk89q.worldguard.protection.flags.DefaultFlag;
-import com.sk89q.worldguard.protection.managers.RegionManager;
-import com.sk89q.worldguard.protection.regions.ProtectedRegion;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import static com.sk89q.worldguard.bukkit.BukkitUtil.toVector;
 
 /**
  * Handles all events thrown in relation to a player.
  */
 public class WorldGuardPlayerListener implements Listener {
 
+    private Pattern opPattern = Pattern.compile("^/op(?:\\s.*)?$", Pattern.CASE_INSENSITIVE);
     private WorldGuardPlugin plugin;
 
     /**
@@ -347,6 +329,10 @@ public class WorldGuardPlayerListener implements Listener {
                 return;
             }
         }
+
+        if (cfg.deopOnJoin) {
+            player.setOp(false);
+        }
     }
 
     @EventHandler
@@ -420,6 +406,40 @@ public class WorldGuardPlayerListener implements Listener {
                 player.sendMessage(ChatColor.RED + "Infinite stack removed.");
             }
         }
+
+        if (wcfg.blockPotions.size() > 0) {
+            ItemStack item = event.getItem();
+            if (item != null && item.getType() == Material.POTION && !BukkitUtil.isWaterPotion(item)) {
+                PotionEffect blockedEffect = null;
+
+                Potion potion = Potion.fromDamage(BukkitUtil.getPotionEffectBits(item));
+                for (PotionEffect effect : potion.getEffects()) {
+                    if (wcfg.blockPotions.contains(effect.getType())) {
+                        blockedEffect = effect;
+                        break;
+                    }
+                }
+
+                if (blockedEffect != null) {
+                    if (plugin.hasPermission(player, "worldguard.override.potions")) {
+                        if (potion.isSplash() && wcfg.blockPotionsAlways) {
+                            player.sendMessage(ChatColor.RED + "Sorry, potions with " +
+                                    blockedEffect.getType().getName() + " can't be thrown, " +
+                                    "even if you have a permission to bypass it, " +
+                                    "due to limitations (and because overly-reliable potion blocking is on).");
+                            event.setUseItemInHand(Result.DENY);
+                            return;
+                        }
+                    } else {
+                        player.sendMessage(ChatColor.RED + "Sorry, potions with "
+                                + blockedEffect.getType().getName() + " are presently disabled.");
+                        event.setUseItemInHand(Result.DENY);
+                        return;
+                    }
+
+                }
+            }
+        }
     }
 
     /**
@@ -463,6 +483,16 @@ public class WorldGuardPlayerListener implements Listener {
                         && !set.allows(DefaultFlag.USE, localPlayer)
                         && !set.canBuild(localPlayer)) {
                     player.sendMessage(ChatColor.DARK_RED + "You don't have permission to use that in this area.");
+                    event.setUseInteractedBlock(Result.DENY);
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+
+            if (type == BlockID.DRAGON_EGG) {
+                if (!plugin.getGlobalRegionManager().hasBypass(player, world)
+                        && !set.canBuild(localPlayer)) {
+                    player.sendMessage(ChatColor.DARK_RED + "You're not allowed to move dragon eggs here!");
                     event.setUseInteractedBlock(Result.DENY);
                     event.setCancelled(true);
                     return;
@@ -638,6 +668,16 @@ public class WorldGuardPlayerListener implements Listener {
                 }
             }
 
+            if (type == BlockID.DRAGON_EGG) {
+                if (!plugin.getGlobalRegionManager().hasBypass(player, world)
+                        && !set.canBuild(localPlayer)) {
+                    player.sendMessage(ChatColor.DARK_RED + "You're not allowed to move dragon eggs here!");
+                    event.setUseInteractedBlock(Result.DENY);
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+
             if (type == BlockID.LEVER
                     || type == BlockID.STONE_BUTTON
                     || type == BlockID.NOTE_BLOCK
@@ -654,7 +694,7 @@ public class WorldGuardPlayerListener implements Listener {
                     || type == BlockID.BREWING_STAND
                     || type == BlockID.ENCHANTMENT_TABLE
                     || type == BlockID.CAULDRON
-                    || type == BlockID.DRAGON_EGG) {
+                    || type == BlockID.BEACON) {
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
                         && !set.canBuild(localPlayer)
                         && !set.allows(DefaultFlag.USE, localPlayer)) {
@@ -1092,6 +1132,14 @@ public class WorldGuardPlayerListener implements Listener {
             if (blockedCommands != null && blockedCommands.contains(lowerCommand)
                     && (allowedCommands == null || !allowedCommands.contains(lowerCommand))) {
                 player.sendMessage(ChatColor.RED + lowerCommand + " is blocked in this area.");
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        if (cfg.blockInGameOp) {
+            if (opPattern.matcher(event.getMessage()).matches()) {
+                player.sendMessage(ChatColor.RED + "/op can only be used in console (as set by a WG setting).");
                 event.setCancelled(true);
                 return;
             }

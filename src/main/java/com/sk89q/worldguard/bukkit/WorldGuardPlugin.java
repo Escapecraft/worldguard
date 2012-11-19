@@ -19,6 +19,8 @@
 
 package com.sk89q.worldguard.bukkit;
 
+import static com.sk89q.worldguard.bukkit.BukkitUtil.hasHangingEvent;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -106,6 +108,7 @@ public class WorldGuardPlugin extends JavaPlugin {
     /**
      * Called on plugin enable.
      */
+    @Override
     @SuppressWarnings("deprecation")
     public void onEnable() {
 
@@ -150,7 +153,8 @@ public class WorldGuardPlugin extends JavaPlugin {
         flagStateManager = new FlagStateManager(this);
 
         if (configuration.useRegionsScheduler) {
-            getServer().getScheduler().scheduleAsyncRepeatingTask(this, flagStateManager, FlagStateManager.RUN_DELAY, FlagStateManager.RUN_DELAY);
+            getServer().getScheduler().scheduleSyncRepeatingTask(this, flagStateManager,
+                    FlagStateManager.RUN_DELAY, FlagStateManager.RUN_DELAY);
         }
 
         // Register events
@@ -160,6 +164,11 @@ public class WorldGuardPlugin extends JavaPlugin {
         (new WorldGuardWeatherListener(this)).registerEvents();
         (new WorldGuardVehicleListener(this)).registerEvents();
         (new WorldGuardServerListener(this)).registerEvents();
+        if (hasHangingEvent()) {
+            (new WorldGuardHangingListener(this)).registerEvents();
+        } else {
+            (new WorldGuardPaintingListener(this)).registerEvents();
+        }
         configuration.updateCommandBookGodMode();
 
         if (getServer().getPluginManager().isPluginEnabled("CommandBook")) {
@@ -187,6 +196,7 @@ public class WorldGuardPlugin extends JavaPlugin {
     /**
      * Called on plugin disable.
      */
+    @Override
     public void onDisable() {
         globalRegionManager.unload();
         configuration.unload();

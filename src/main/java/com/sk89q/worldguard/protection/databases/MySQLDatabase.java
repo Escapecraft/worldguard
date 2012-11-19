@@ -20,20 +20,6 @@
 package com.sk89q.worldguard.protection.databases;
 
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.PreparedStatement;
-
 import com.sk89q.worldedit.BlockVector;
 import com.sk89q.worldedit.BlockVector2D;
 import com.sk89q.worldedit.Vector;
@@ -46,9 +32,22 @@ import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedPolygonalRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion.CircularInheritanceException;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.DumperOptions.FlowStyle;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.representer.Representer;
+
+import java.sql.*;
+import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class MySQLDatabase extends AbstractProtectionDatabase {
     private final Logger logger;
+
+    private Yaml yaml;
 
     private Map<String, ProtectedRegion> regions;
 
@@ -60,12 +59,11 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
     private final ConfigurationManager config;
 
     private Connection conn;
-    private String world;
     private int worldDbId = -1; // The database will never have an id of -1;
 
     public MySQLDatabase(ConfigurationManager config, String world, Logger logger) throws ProtectionDatabaseException {
         this.config = config;
-        this.world = world;
+        String world1 = world;
         this.logger = logger;
 
         try {
@@ -89,7 +87,7 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
                     "WHERE `name` = ? LIMIT 0,1"
             );
 
-            worldStmt.setString(1, this.world);
+            worldStmt.setString(1, world1);
             ResultSet worldResult = worldStmt.executeQuery();
 
             if (worldResult.first()) {
@@ -122,6 +120,15 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
             // no point continuing
             return;
         }
+
+        DumperOptions options = new DumperOptions();
+        options.setIndent(2);
+        options.setDefaultFlowStyle(FlowStyle.FLOW);
+        Representer representer = new Representer();
+        representer.setDefaultFlowStyle(FlowStyle.FLOW);
+
+        // We have to use this in order to properly save non-string values
+        yaml = new Yaml(new SafeConstructor(), new Representer(), options);
     }
 
     private void connect() throws SQLException {
@@ -163,8 +170,8 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
             while (flagsResultSet.next()) {
                 regionFlags.put(
                         flagsResultSet.getString("flag"),
-                        flagsResultSet.getObject("value")
-                );
+                        sqlUnmarshal(flagsResultSet.getString("value"))
+                        );
             }
 
             // @TODO: Make this better
@@ -453,6 +460,7 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
         poly2dRegions = regions;
     }
 
+    @Override
     public void load() throws ProtectionDatabaseException {
         try {
             connect();
@@ -533,15 +541,15 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
                     Statement.RETURN_GENERATED_KEYS
             );
 
-            for(int i=0, len=usernames.length; i<len; i++) {
-                if (!users.containsKey(usernames[i])) {
-                    insertUserStatement.setString(1, usernames[i]);
+            for (String username : usernames) {
+                if (!users.containsKey(username)) {
+                    insertUserStatement.setString(1, username);
                     insertUserStatement.execute();
                     ResultSet generatedKeys = insertUserStatement.getGeneratedKeys();
                     if (generatedKeys.first()) {
-                        users.put(usernames[i], generatedKeys.getInt(1));
+                        users.put(username, generatedKeys.getInt(1));
                     } else {
-                        logger.warning("Could not get the database id for user " + usernames[i]);
+                        logger.warning("Could not get the database id for user " + username);
                     }
                 }
             }
@@ -597,15 +605,15 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
                     Statement.RETURN_GENERATED_KEYS
             );
 
-            for(int i=0, len=groupnames.length; i<len; i++) {
-                if (!groups.containsKey(groupnames[i])) {
-                    insertGroupStatement.setString(1, groupnames[i]);
+            for (String groupname : groupnames) {
+                if (!groups.containsKey(groupname)) {
+                    insertGroupStatement.setString(1, groupname);
                     insertGroupStatement.execute();
                     ResultSet generatedKeys = insertGroupStatement.getGeneratedKeys();
                     if (generatedKeys.first()) {
-                        groups.put(groupnames[i], generatedKeys.getInt(1));
+                        groups.put(groupname, generatedKeys.getInt(1));
                     } else {
-                        logger.warning("Could not get the database id for user " + groupnames[i]);
+                        logger.warning("Could not get the database id for user " + groupname);
                     }
                 }
             }
@@ -631,6 +639,7 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
      *
      * @see com.sk89q.worldguard.protection.databases.ProtectionDatabase#save()
      */
+    @Override
     public void save() throws ProtectionDatabaseException {
         try {
             connect();
@@ -739,7 +748,7 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
         for (Map.Entry<Flag<?>, Object> entry : region.getFlags().entrySet()) {
             if (entry.getValue() == null) continue;
 
-            Object flag = marshalFlag(entry.getKey(), entry.getValue());
+            Object flag = sqlMarshal(marshalFlag(entry.getKey(), entry.getValue()));
 
             PreparedStatement insertFlagStatement = this.conn.prepareStatement(
                     "INSERT INTO `region_flag` ( " +
@@ -785,9 +794,9 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
                 "VALUES (?, " + this.worldDbId + ",  ?, ?)"
         );
 
-        Map<String,Integer> players = getUserIds(domain.getPlayers().toArray(new String[0]));
+        Set<String> var = domain.getPlayers();
 
-        for (Integer player : players.values()) {
+        for (Integer player : getUserIds(var.toArray(new String[var.size()])).values()) {
             insertUsersForRegion.setString(1, region.getId().toLowerCase());
             insertUsersForRegion.setInt(2, player);
             insertUsersForRegion.setBoolean(3, owners);
@@ -812,9 +821,8 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
                 "VALUES (?, " + this.worldDbId + ",  ?, ?)"
         );
 
-        Map<String,Integer> groups = getGroupIds(domain.getGroups().toArray(new String[0]));
-
-        for (Integer group : groups.values()) {
+        Set<String> groupVar = domain.getGroups();
+        for (Integer group : getGroupIds(groupVar.toArray(new String[groupVar.size()])).values()) {
             insertGroupsForRegion.setString(1, region.getId().toLowerCase());
             insertGroupsForRegion.setInt(2, group);
             insertGroupsForRegion.setBoolean(3, owners);
@@ -924,8 +932,9 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
                 ") VALUES (null, ?, " + this.worldDbId + ", ?, ?)"
         );
 
+        String lowerId = region.getId();
         for (BlockVector2D point : region.getPoints()) {
-            insertPoly2dPointStatement.setString(1, region.getId().toLowerCase());
+            insertPoly2dPointStatement.setString(1, lowerId);
             insertPoly2dPointStatement.setInt(2, point.getBlockZ());
             insertPoly2dPointStatement.setInt(3, point.getBlockX());
 
@@ -1007,11 +1016,25 @@ public class MySQLDatabase extends AbstractProtectionDatabase {
         updateRegion(region, "global");
     }
 
+    @Override
     public Map<String, ProtectedRegion> getRegions() {
         return regions;
     }
 
+    @Override
     public void setRegions(Map<String, ProtectedRegion> regions) {
         this.regions = regions;
+    }
+    
+    protected Object sqlUnmarshal(String rawValue) {
+        try {
+            return yaml.load(rawValue);
+        } catch (YAMLException e) {
+            return String.valueOf(rawValue);
+        }
+    }
+    
+    protected String sqlMarshal(Object rawObject) {
+        return yaml.dump(rawObject);
     }
 }
