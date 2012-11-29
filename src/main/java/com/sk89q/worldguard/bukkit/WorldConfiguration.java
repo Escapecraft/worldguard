@@ -98,6 +98,7 @@ public class WorldConfiguration {
     public boolean blockWitherSkullExplosions;
     public boolean blockWitherSkullBlockDamage;
     public boolean blockEnderDragonBlockDamage;
+    public boolean blockEnderDragonPortalCreation;
     public boolean blockFireballExplosions;
     public boolean blockFireballBlockDamage;
     public boolean blockEntityPaintingDestroy;
@@ -338,6 +339,7 @@ public class WorldConfiguration {
         blockWitherSkullExplosions = getBoolean("mobs.block-wither-skull-explosions", false);
         blockWitherSkullBlockDamage = getBoolean("mobs.block-wither-skull-block-damage", false);
         blockEnderDragonBlockDamage = getBoolean("mobs.block-enderdragon-block-damage", false);
+        blockEnderDragonPortalCreation = getBoolean("mobs.block-enderdragon-portal-creation", false);
         blockFireballExplosions = getBoolean("mobs.block-fireball-explosions", false);
         blockFireballBlockDamage = getBoolean("mobs.block-fireball-block-damage", false);
         antiWolfDumbness = getBoolean("mobs.anti-wolf-dumbness", false);
