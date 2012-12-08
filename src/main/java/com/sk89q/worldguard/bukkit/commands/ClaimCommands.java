@@ -230,7 +230,16 @@ public class ClaimCommands {
         try {
             mgr.save();
             sender.sendMessage(ChatColor.YELLOW + "Landclaim " + id + " updated.");
-            logClaimChange(modAction, player.getName(), player.getWorld().getName(), region, subCmd.toLowerCase() + args.getPaddedSlice(3, 0));
+            String aS = "";
+            for (String s : args.getPaddedSlice(3,0) {
+                if (aS.equalsIgnoreCase("")) {
+                    aS = s;
+                } else {
+                    aS += "," + s
+                }
+            }
+            
+            logClaimChange(modAction, player.getName(), player.getWorld().getName(), region, subCmd.toLowerCase() + " " + aS);
         } catch (ProtectionDatabaseException e) {
             throw new CommandException("Failed to write Landclaim: "
                     + e.getMessage());
