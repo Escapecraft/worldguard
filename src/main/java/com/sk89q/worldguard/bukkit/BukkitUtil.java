@@ -19,29 +19,19 @@
 
 package com.sk89q.worldguard.bukkit;
 
-import java.util.List;
-
+import com.sk89q.worldedit.BlockVector;
+import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.blocks.BlockID;
+import com.sk89q.worldedit.blocks.BlockType;
 import com.sk89q.worldedit.blocks.ItemID;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.ExperienceOrb;
-import org.bukkit.entity.Item;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.TNTPrimed;
-import org.bukkit.entity.Tameable;
-import org.bukkit.entity.FallingSand;
-
+import org.bukkit.entity.*;
 import org.bukkit.inventory.ItemStack;
-
-import com.sk89q.worldedit.BlockVector;
-import com.sk89q.worldedit.Vector;
-import com.sk89q.worldedit.blocks.BlockType;
+import java.util.List;
 
 public class BukkitUtil {
 
@@ -140,20 +130,37 @@ public class BukkitUtil {
     /**
      * Checks if the given block is water
      *
-     * @param world
-     * @param ox
-     * @param oy
-     * @param oz
-     * @return
+     * @param world the world
+     * @param ox x
+     * @param oy y
+     * @param oz z
+     * @return true if it's water
      */
     public static boolean isBlockWater(World world, int ox, int oy, int oz) {
         Block block = world.getBlockAt(ox, oy, oz);
         int id = block.getTypeId();
-        if (id == 8 || id == 9) {
-            return true;
-        } else {
-            return false;
-        }
+        return id == 8 || id == 9;
+    }
+
+    /**
+     * Checks if the given potion is a vial of water.
+     *
+     * @param item the item to check
+     * @return true if it's a water vial
+     */
+    public static boolean isWaterPotion(ItemStack item) {
+        return (item.getDurability() & 0x3F) == 0;
+    }
+
+    /**
+     * Get just the potion effect bits. This is to work around bugs with potion
+     * parsing.
+     *
+     * @param item item
+     * @return new bits
+     */
+    public static int getPotionEffectBits(ItemStack item) {
+        return item.getDurability() & 0x3F;
     }
 
     /**
@@ -242,7 +249,7 @@ public class BukkitUtil {
      * Returns whether an entity should be removed for the halt activity mode.
      *
      * @param entity
-     * @return
+     * @return true if it's to be removed
      */
     public static boolean isIntensiveEntity(Entity entity) {
         return entity instanceof Item
@@ -252,5 +259,38 @@ public class BukkitUtil {
                 || (entity instanceof LivingEntity
                     && !(entity instanceof Tameable)
                     && !(entity instanceof Player));
+    }
+
+    /**
+     * Returns whether our running CraftBukkit already supports
+     * the HangingEvent instead of the PaintingEvent
+     *
+     * @return true if the hanging event is supported
+     */
+    public static boolean hasHangingEvent() {
+        Class<?> tmp = null;
+        try {
+            tmp = Class.forName("org.bukkit.event.hanging.HangingEvent");
+        } catch (ClassNotFoundException ignored) { }
+        return (tmp != null);
+    }
+
+    /**
+     * Search an enum for a value, and return the first one found. Return null if the
+     * enum entry is not found.
+     *
+     * @param enumType enum class
+     * @param values values to test
+     * @return a value in the enum or null
+     */
+    public static <T extends Enum<T>> T tryEnum(Class<T> enumType, String ... values) {
+        for (String val : values) {
+            try {
+                return Enum.valueOf(enumType, val);
+            } catch (IllegalArgumentException e) {
+            }
+        }
+
+        return null;
     }
 }

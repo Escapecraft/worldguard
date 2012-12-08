@@ -19,12 +19,6 @@
 
 package com.sk89q.worldguard.protection.regions;
 
-import java.awt.geom.Line2D;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-
 import com.sk89q.worldedit.BlockVector;
 import com.sk89q.worldedit.BlockVector2D;
 import com.sk89q.worldedit.Vector;
@@ -32,6 +26,12 @@ import com.sk89q.worldguard.LocalPlayer;
 import com.sk89q.worldguard.domains.DefaultDomain;
 import com.sk89q.worldguard.protection.UnsupportedIntersectionException;
 import com.sk89q.worldguard.protection.flags.Flag;
+
+import java.awt.geom.Line2D;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Represents a region of any shape and size that can be protected.
@@ -54,6 +54,11 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
      * Priority.
      */
     private int priority = 0;
+
+    /**
+     * Land type.
+     */
+    private ClaimType claimType;
 
     /**
      * Holds the curParent.
@@ -116,12 +121,30 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * Gets the id of this region
+     * Gets the id of this region.
      *
      * @return the id
      */
     public String getId() {
         return id;
+    }
+
+    /**
+     * Gets the claim type of this region.
+     *
+     * @return the claim type
+     */
+    public ClaimType getClaimType() {
+        return claimType;
+    }
+
+    /**
+     * Sets the claim type of this region.
+     *
+     * @param type the claim type
+     */
+    public void setClaimType(ClaimType type) {
+        claimType = type;
     }
 
     /**
@@ -143,6 +166,27 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
+     * Expand region to max vertical size.
+     *
+     * @param minY lowest Y
+     * @param maxY highest Y
+     */
+    public void expandVert(int minY, int maxY) {
+        min = new BlockVector(min.getBlockX(), minY, min.getBlockZ());
+        max = new BlockVector(max.getBlockX(), maxY, max.getBlockZ());
+    }
+
+    /**
+     * Expand region area evenly by number of specified blocks.
+     *
+     * @param amount the number of blocks to expand in X and Z directions
+     */
+    public void expandArea(int amount) {
+        min = new BlockVector(min.getBlockX() - amount, min.getBlockY(), min.getBlockZ() - amount);
+        max = new BlockVector(max.getBlockX() + amount, max.getBlockY(), max.getBlockZ() + amount);
+    }
+
+    /**
      * @return the priority
      */
     public int getPriority() {
@@ -150,7 +194,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param priority the priority to setFlag
+     * @param priority the priority to set
      */
     public void setPriority(int priority) {
         this.priority = priority;
@@ -167,7 +211,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
      * Set the curParent. This checks to make sure that it will not result
      * in circular inheritance.
      *
-     * @param parent the curParent to setFlag
+     * @param parent the curParent to set
      * @throws CircularInheritanceException when circular inheritance is detected
      */
     public void setParent(ProtectedRegion parent) throws CircularInheritanceException {
@@ -201,7 +245,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param owners the owners to setFlag
+     * @param owners the owners to set
      */
     public void setOwners(DefaultDomain owners) {
         this.owners = owners;
@@ -215,7 +259,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param members the members to setFlag
+     * @param members the members to set
      */
     public void setMembers(DefaultDomain members) {
         this.members = members;
@@ -411,11 +455,32 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * Gets the 2D points for this region
+     * Gets the 2D points for this region.
      *
      * @return The points for this region as (x, z) coordinates
      */
     public abstract List<BlockVector2D> getPoints();
+
+    /**
+     * Get the number of blocks in this region.
+     *
+     * @return the area of this region, in blocks
+     */
+    public abstract int area();
+
+    /**
+     * Get the x length, in blocks, of this region.
+     *
+     * @return the x length of the region, in blocks
+     */
+    public abstract int xLength();
+
+    /**
+     * Get the z length, in blocks, of this region.
+     *
+     * @return the z length of the region, in blocks
+     */
+    public abstract int zLength();
 
     /**
      * Get the number of blocks in this region
@@ -541,25 +606,25 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
         List<BlockVector2D> pts2 = region.getPoints();
         BlockVector2D lastPt1 = pts1.get(pts1.size() - 1);
         BlockVector2D lastPt2 = pts2.get(pts2.size() - 1);
-        for (int i = 0; i < pts1.size(); i++ ) {
-            for (int j = 0; j < pts2.size(); j++) {
+        for (BlockVector2D aPts1 : pts1) {
+            for (BlockVector2D aPts2 : pts2) {
 
                 Line2D line1 = new Line2D.Double(
                         lastPt1.getBlockX(),
                         lastPt1.getBlockZ(),
-                        pts1.get(i).getBlockX(),
-                        pts1.get(i).getBlockZ());
+                        aPts1.getBlockX(),
+                        aPts1.getBlockZ());
 
                 if (line1.intersectsLine(
-                                lastPt2.getBlockX(),
-                                lastPt2.getBlockZ(),
-                                pts2.get(j).getBlockX(),
-                                pts2.get(j).getBlockZ())) {
+                        lastPt2.getBlockX(),
+                        lastPt2.getBlockZ(),
+                        aPts2.getBlockX(),
+                        aPts2.getBlockZ())) {
                     return true;
                 }
-                lastPt2 = pts2.get(j);
+                lastPt2 = aPts2;
             }
-            lastPt1 = pts1.get(i);
+            lastPt1 = aPts1;
         }
         return false;
     }

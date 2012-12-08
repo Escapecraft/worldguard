@@ -47,6 +47,21 @@ public class GlobalProtectedRegion extends ProtectedRegion {
     }
 
     @Override
+    public int area() {
+        return 0;
+    }
+
+    @Override
+    public int xLength() {
+        return 0;
+    }
+
+    @Override
+    public int zLength() {
+        return 0;
+    }
+
+    @Override
     public boolean contains(Vector pt) {
         return false;
     }

@@ -19,22 +19,8 @@
 
 package com.sk89q.worldguard.bukkit;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.logging.Level;
 import com.sk89q.util.yaml.YAMLFormat;
 import com.sk89q.util.yaml.YAMLProcessor;
-import org.bukkit.block.Block;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Player;
-
 import com.sk89q.worldguard.blacklist.Blacklist;
 import com.sk89q.worldguard.blacklist.BlacklistLogger;
 import com.sk89q.worldguard.blacklist.loggers.ConsoleLoggerHandler;
@@ -42,6 +28,16 @@ import com.sk89q.worldguard.blacklist.loggers.DatabaseLoggerHandler;
 import com.sk89q.worldguard.blacklist.loggers.FileLoggerHandler;
 import com.sk89q.worldguard.chest.ChestProtection;
 import com.sk89q.worldguard.chest.SignChestProtection;
+import org.bukkit.block.Block;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.potion.PotionEffectType;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.*;
+import java.util.logging.Level;
 
 /**
  * Holds the configuration for individual worlds.
@@ -79,10 +75,13 @@ public class WorldConfiguration {
     public boolean simulateSponge;
     public int spongeRadius;
     public boolean disableExpDrops;
+    public Set<PotionEffectType> blockPotions;
+    public boolean blockPotionsAlways;
     public boolean pumpkinScuba;
     public boolean redstoneSponges;
     public boolean noPhysicsGravel;
     public boolean noPhysicsSand;
+    public boolean ropeLadders;
     public boolean allowPortalAnywhere;
     public Set<Integer> preventWaterDamage;
     public boolean blockLighter;
@@ -94,11 +93,18 @@ public class WorldConfiguration {
     public boolean blockTNTBlockDamage;
     public boolean blockCreeperExplosions;
     public boolean blockCreeperBlockDamage;
+    public boolean blockWitherExplosions;
+    public boolean blockWitherBlockDamage;
+    public boolean blockWitherSkullExplosions;
+    public boolean blockWitherSkullBlockDamage;
     public boolean blockEnderDragonBlockDamage;
+    public boolean blockEnderDragonPortalCreation;
     public boolean blockFireballExplosions;
     public boolean blockFireballBlockDamage;
     public boolean blockEntityPaintingDestroy;
+    public boolean blockEntityItemFrameDestroy;
     public boolean blockPluginSpawning;
+    public boolean blockGroundSlimes;
     public boolean disableContactDamage;
     public boolean disableFallDamage;
     public boolean disableLavaDamage;
@@ -113,12 +119,16 @@ public class WorldConfiguration {
     public boolean disableMobDamage;
     public boolean useRegions;
     public boolean highFreqFlags;
-    public int regionWand = 287;
+    public int regionWand;
     public Set<EntityType> blockCreatureSpawn;
     // public boolean useiConomy;
     // public boolean buyOnClaim;
     // public double buyOnClaimPrice;
     public int maxClaimVolume;
+    public int maxClaimArea;
+    public int claimBorder;
+    public int claimFloor;
+    public boolean claimIgnoreNegPriority;
     public boolean claimOnlyInsideExistingRegions;
     public int maxRegionCountPerPlayer;
     public boolean antiWolfDumbness;
@@ -143,6 +153,7 @@ public class WorldConfiguration {
     public boolean disableIceFormation;
     public boolean disableLeafDecay;
     public boolean disableGrassGrowth;
+    public boolean disableMyceliumSpread;
     public boolean disableEndermanGriefing;
     public boolean regionInvinciblityRemovesMobs;
     public boolean disableDeathMessages;
@@ -287,6 +298,18 @@ public class WorldConfiguration {
         disableExpDrops = getBoolean("protection.disable-xp-orb-drops", false);
         disableObsidianGenerators = getBoolean("protection.disable-obsidian-generators", false);
 
+        blockPotions = new HashSet<PotionEffectType>();
+        for (String potionName : getStringList("gameplay.block-potions", null)) {
+            PotionEffectType effect = PotionEffectType.getByName(potionName);
+
+            if (effect == null) {
+                plugin.getLogger().warning("Unknown potion effect type '" + potionName + "'");
+            } else {
+                blockPotions.add(effect);
+            }
+        }
+        blockPotionsAlways = getBoolean("gameplay.block-potions-overly-reliably", false);
+
         simulateSponge = getBoolean("simulation.sponge.enable", true);
         spongeRadius = Math.max(1, getInt("simulation.sponge.radius", 3)) - 1;
         redstoneSponges = getBoolean("simulation.sponge.redstone", false);
@@ -296,6 +319,7 @@ public class WorldConfiguration {
 
         noPhysicsGravel = getBoolean("physics.no-physics-gravel", false);
         noPhysicsSand = getBoolean("physics.no-physics-sand", false);
+        ropeLadders = getBoolean("physics.vine-like-rope-ladders", false);
         allowPortalAnywhere = getBoolean("physics.allow-portal-anywhere", false);
         preventWaterDamage = new HashSet<Integer>(getIntList("physics.disable-water-damage-blocks", null));
 
@@ -310,13 +334,20 @@ public class WorldConfiguration {
 
         blockCreeperExplosions = getBoolean("mobs.block-creeper-explosions", false);
         blockCreeperBlockDamage = getBoolean("mobs.block-creeper-block-damage", false);
+        blockWitherExplosions = getBoolean("mobs.block-wither-explosions", false);
+        blockWitherBlockDamage = getBoolean("mobs.block-wither-block-damage", false);
+        blockWitherSkullExplosions = getBoolean("mobs.block-wither-skull-explosions", false);
+        blockWitherSkullBlockDamage = getBoolean("mobs.block-wither-skull-block-damage", false);
         blockEnderDragonBlockDamage = getBoolean("mobs.block-enderdragon-block-damage", false);
+        blockEnderDragonPortalCreation = getBoolean("mobs.block-enderdragon-portal-creation", false);
         blockFireballExplosions = getBoolean("mobs.block-fireball-explosions", false);
         blockFireballBlockDamage = getBoolean("mobs.block-fireball-block-damage", false);
         antiWolfDumbness = getBoolean("mobs.anti-wolf-dumbness", false);
         disableEndermanGriefing = getBoolean("mobs.disable-enderman-griefing", false);
         blockEntityPaintingDestroy = getBoolean("mobs.block-painting-destroy", false);
+        blockEntityItemFrameDestroy = getBoolean("mobs.block-item-frame-destroy", false);
         blockPluginSpawning = getBoolean("mobs.block-plugin-spawning", true);
+        blockGroundSlimes = getBoolean("mobs.block-above-ground-slimes", false);
 
         disableFallDamage = getBoolean("player-damage.disable-fall-damage", false);
         disableLavaDamage = getBoolean("player-damage.disable-lava-damage", false);
@@ -354,12 +385,17 @@ public class WorldConfiguration {
         disableIceFormation = getBoolean("dynamics.disable-ice-formation", false);
         disableLeafDecay = getBoolean("dynamics.disable-leaf-decay", false);
         disableGrassGrowth = getBoolean("dynamics.disable-grass-growth", false);
+        disableMyceliumSpread = getBoolean("dynamics.disable-mycelium-spread", false);
 
         useRegions = getBoolean("regions.enable", true);
         regionInvinciblityRemovesMobs = getBoolean("regions.invincibility-removes-mobs", false);
         highFreqFlags = getBoolean("regions.high-frequency-flags", false);
-        regionWand = getInt("regions.wand", 287);
+        regionWand = getInt("regions.wand", 334);
+        claimBorder = getInt("regions.claim-border", 0);
+        claimFloor = getInt("regions.claim-floor", 0);
+        claimIgnoreNegPriority = getBoolean("regions.claim-ignore-neg-priority", false);
         maxClaimVolume = getInt("regions.max-claim-volume", 30000);
+        maxClaimArea = getInt("regions.max-claim-area", 2500);
         claimOnlyInsideExistingRegions = getBoolean("regions.claim-only-inside-existing-regions", false);
 
         maxRegionCountPerPlayer = getInt("regions.max-region-count-per-player.default", 7);
@@ -502,10 +538,8 @@ public class WorldConfiguration {
     }
 
     public boolean isChestProtected(Block block) {
-        if (!signChestProtection) {
-            return false;
-        }
-        return chestProtection.isProtected(block, null);
+
+        return signChestProtection && chestProtection.isProtected(block, null);
     }
 
     public boolean isChestProtectedPlacement(Block block, Player player) {

@@ -39,6 +39,7 @@ import com.sk89q.worldedit.Vector;
 import com.sk89q.worldguard.domains.DefaultDomain;
 import com.sk89q.worldguard.protection.flags.DefaultFlag;
 import com.sk89q.worldguard.protection.flags.Flag;
+import com.sk89q.worldguard.protection.regions.ClaimType;
 import com.sk89q.worldguard.protection.regions.GlobalProtectedRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedPolygonalRegion;
@@ -122,6 +123,17 @@ public class YAMLDatabase extends AbstractProtectionDatabase {
                 String parentId = node.getString("parent");
                 if (parentId != null) {
                     parentSets.put(region, parentId);
+                }
+
+                String claimType = node.getString("claim");
+                if (claimType != null) {
+                    if (claimType.compareToIgnoreCase("land") == 0) {
+                        region.setClaimType(ClaimType.LAND);
+                    } else if (claimType.compareToIgnoreCase("town") == 0) {
+                        region.setClaimType(ClaimType.TOWN);
+                    } else {  // default is region
+                        region.setClaimType(ClaimType.REGION);
+                    }
                 }
             } catch (NullPointerException e) {
                 logger.warning("Missing data for region '" + id + '"');
@@ -243,6 +255,10 @@ public class YAMLDatabase extends AbstractProtectionDatabase {
             ProtectedRegion parent = region.getParent();
             if (parent != null) {
                 node.setProperty("parent", parent.getId());
+            }
+            ClaimType claim = region.getClaimType();
+            if (claim != null) {
+                node.setProperty("claim", claim.toString().toLowerCase());
             }
         }
         

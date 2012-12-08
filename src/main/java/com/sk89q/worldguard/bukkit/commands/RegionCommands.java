@@ -19,23 +19,7 @@
 
 package com.sk89q.worldguard.bukkit.commands;
 
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-
-import org.bukkit.ChatColor;
-import org.bukkit.World;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
-import com.sk89q.minecraft.util.commands.Command;
-import com.sk89q.minecraft.util.commands.CommandContext;
-import com.sk89q.minecraft.util.commands.CommandException;
-import com.sk89q.minecraft.util.commands.CommandPermissions;
-import com.sk89q.minecraft.util.commands.CommandPermissionsException;
+import com.sk89q.minecraft.util.commands.*;
 import com.sk89q.worldedit.BlockVector;
 import com.sk89q.worldedit.Location;
 import com.sk89q.worldedit.Vector;
@@ -49,20 +33,25 @@ import com.sk89q.worldguard.bukkit.WorldConfiguration;
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.domains.DefaultDomain;
 import com.sk89q.worldguard.protection.ApplicableRegionSet;
-import com.sk89q.worldguard.protection.flags.DefaultFlag;
-import com.sk89q.worldguard.protection.flags.Flag;
-import com.sk89q.worldguard.protection.flags.InvalidFlagFormat;
+import com.sk89q.worldguard.protection.databases.ProtectionDatabaseException;
+import com.sk89q.worldguard.protection.databases.RegionDBUtil;
+import com.sk89q.worldguard.protection.databases.migrators.AbstractDatabaseMigrator;
+import com.sk89q.worldguard.protection.databases.migrators.MigrationException;
+import com.sk89q.worldguard.protection.databases.migrators.MigratorKey;
+import com.sk89q.worldguard.protection.flags.*;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.GlobalProtectedRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedPolygonalRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion.CircularInheritanceException;
-import com.sk89q.worldguard.protection.databases.ProtectionDatabaseException;
-import com.sk89q.worldguard.protection.databases.migrators.AbstractDatabaseMigrator;
-import com.sk89q.worldguard.protection.databases.migrators.MigrationException;
-import com.sk89q.worldguard.protection.databases.migrators.MigratorKey;
-import com.sk89q.worldguard.protection.databases.RegionDBUtil;
+import org.bukkit.ChatColor;
+import org.bukkit.World;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
 
 public class RegionCommands {
     private final WorldGuardPlugin plugin;
@@ -489,17 +478,27 @@ public class RegionCommands {
         boolean hasFlags = false;
         final StringBuilder s = new StringBuilder(ChatColor.BLUE + "Flags: ");
         for (Flag<?> flag : DefaultFlag.getFlags()) {
-            Object val = region.getFlag(flag);
+            Object val = region.getFlag(flag), group = null;
 
             if (val == null) {
                 continue;
             }
 
-            if (s.length() > 0) {
+            if (hasFlags) {
                 s.append(", ");
             }
 
-            s.append(flag.getName() + ": " + String.valueOf(val));
+            RegionGroupFlag groupFlag = flag.getRegionGroupFlag();
+            if (groupFlag != null) {
+                group = region.getFlag(groupFlag);
+            }
+
+            if(group == null) {
+                s.append(flag.getName()).append(": ").append(String.valueOf(val));
+            } else {
+                s.append(flag.getName()).append(" -g ").append(String.valueOf(group)).append(": ").append(String.valueOf(val));
+            }
+
             hasFlags = true;
         }
         if (hasFlags) {
@@ -661,6 +660,7 @@ public class RegionCommands {
         String id = args.getString(0);
         String flagName = args.getString(1);
         String value = null;
+        RegionGroup groupValue = null;
 
         if (args.argsLength() >= 3) {
             value = args.getJoinedStrings(2);
@@ -708,9 +708,6 @@ public class RegionCommands {
             
             // Need to build a list
             for (Flag<?> flag : DefaultFlag.getFlags()) {
-                if (list.length() > 0) {
-                    list.append(", ");
-                }
 
                 // @TODO deprecate inconsistant "owner" permission
                 if (region.isOwner(localPlayer)) {
@@ -730,8 +727,11 @@ public class RegionCommands {
                                 + flag.getName() + "." + id.toLowerCase())) {
                         continue;
                     }
-                } 
-                
+                }
+
+                if (list.length() > 0) {
+                    list.append(", ");
+                }
                 list.append(flag.getName());
             }
 
@@ -753,38 +753,63 @@ public class RegionCommands {
 
         if (args.hasFlag('g')) {
             String group = args.getFlag('g');
-            if (foundFlag.getRegionGroupFlag() == null) {
+            RegionGroupFlag groupFlag = foundFlag.getRegionGroupFlag();
+            if (groupFlag == null) {
                 throw new CommandException("Region flag '" + foundFlag.getName()
                         + "' does not have a group flag!");
             }
 
+            // Parse the [-g group] separately so entire command can abort if parsing
+            // the [value] part throws an error.
             try {
-                setFlag(region, foundFlag.getRegionGroupFlag(), sender, group);
+                groupValue = groupFlag.parseInput(plugin, sender, group);
+            } catch (InvalidFlagFormat e) {
+                throw new CommandException(e.getMessage());
+            }
+
+        }
+
+        if (value != null) {
+            // Set the flag if [value] was given even if [-g group] was given as well
+            try {
+                setFlag(region, foundFlag, sender, value);
             } catch (InvalidFlagFormat e) {
                 throw new CommandException(e.getMessage());
             }
 
             sender.sendMessage(ChatColor.YELLOW
-                    + "Region group flag for '" + foundFlag.getName() + "' set.");
-        } else {
-            if (value != null) {
-                try {
-                    setFlag(region, foundFlag, sender, value);
-                } catch (InvalidFlagFormat e) {
-                    throw new CommandException(e.getMessage());
-                }
+                    + "Region flag '" + foundFlag.getName() + "' set.");
+        }
 
+        if (value == null && !args.hasFlag('g')) {
+            // Clear the flag only if neither [value] nor [-g group] was given
+            region.setFlag(foundFlag, null);
+
+            // Also clear the associated group flag if one exists
+            RegionGroupFlag groupFlag = foundFlag.getRegionGroupFlag();
+            if (groupFlag != null) {
+                region.setFlag(groupFlag, null);
+            }
+
+            sender.sendMessage(ChatColor.YELLOW
+                    + "Region flag '" + foundFlag.getName() + "' cleared.");
+        }
+
+        if (groupValue != null) {
+            RegionGroupFlag groupFlag = foundFlag.getRegionGroupFlag();
+
+            // If group set to the default, then clear the group flag
+            if (groupValue == groupFlag.getDefault()) {
+                region.setFlag(groupFlag, null);
                 sender.sendMessage(ChatColor.YELLOW
-                        + "Region flag '" + foundFlag.getName() + "' set.");
+                        + "Region group flag for '" + foundFlag.getName() + "' reset to default.");
             } else {
-                // Clear the flag
-                region.setFlag(foundFlag, null);
-
+                region.setFlag(groupFlag, groupValue);
                 sender.sendMessage(ChatColor.YELLOW
-                        + "Region flag '" + foundFlag.getName() + "' cleared.");
+                        + "Region group flag for '" + foundFlag.getName() + "' set.");
             }
         }
-        
+
         try {
             mgr.save();
         } catch (ProtectionDatabaseException e) {
@@ -955,6 +980,7 @@ public class RegionCommands {
     
     @Command(aliases = {"load", "reload"}, usage = "[world]",
             desc = "Reload regions from file", max = 1)
+    @CommandPermissions({"worldguard.region.load"})
     public void load(CommandContext args, CommandSender sender) throws CommandException {
         
         World world = null;
@@ -993,6 +1019,7 @@ public class RegionCommands {
     
     @Command(aliases = {"save", "write"}, usage = "[world]",
             desc = "Re-save regions to file", max = 1)
+    @CommandPermissions({"worldguard.region.save"})
     public void save(CommandContext args, CommandSender sender) throws CommandException {
         
         World world = null;
