@@ -473,7 +473,7 @@ public class RegionCommands {
 
         final String id = region.getId();
 
-        sender.sendMessage(ChatColor.YELLOW + "Region: " + id + ChatColor.GRAY + ", type: " + region.getTypeName() + ", " + ChatColor.BLUE + "Priority: " + region.getPriority());
+        sender.sendMessage(ChatColor.YELLOW + "Region: " + id + ChatColor.GRAY + ", type: " + region.getTypeName() + ", " + ChatColor.AQUA + "claimtype: " + region.getClaimType().toString().toLowerCase() + ", " + ChatColor.BLUE + "Priority: " + region.getPriority());
 
         boolean hasFlags = false;
         final StringBuilder s = new StringBuilder(ChatColor.BLUE + "Flags: ");
