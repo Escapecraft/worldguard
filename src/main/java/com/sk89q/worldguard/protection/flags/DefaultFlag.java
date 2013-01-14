@@ -37,6 +37,7 @@ public final class DefaultFlag {
     public static final StateFlag CREEPER_EXPLOSION = new StateFlag("creeper-explosion", true, RegionGroup.ALL);
     public static final StateFlag ENDERDRAGON_BLOCK_DAMAGE = new StateFlag("enderdragon-block-damage", true);
     public static final StateFlag GHAST_FIREBALL = new StateFlag("ghast-fireball", true, RegionGroup.ALL);
+    public static final StateFlag OTHER_EXPLOSION = new StateFlag("other-explosion", true);
     public static final StateFlag SLEEP = new StateFlag("sleep", true);
     public static final StateFlag TNT = new StateFlag("tnt", true, RegionGroup.ALL);
     public static final StateFlag LIGHTER = new StateFlag("lighter", true, RegionGroup.ALL);
@@ -66,6 +67,7 @@ public final class DefaultFlag {
     public static final StateFlag ENTRY = new StateFlag("entry", true);
     public static final StateFlag EXIT = new StateFlag("exit", true);
     public static final StateFlag ITEM_DROP = new StateFlag("item-drop", true);
+    public static final StateFlag ENDERPEARL = new StateFlag("enderpearl", true);
     public static final StateFlag ENTITY_PAINTING_DESTROY = new StateFlag("entity-painting-destroy", true);
     public static final StateFlag ENTITY_ITEM_FRAME_DESTROY = new StateFlag("entity-item-frame-destroy", true);
     public static final StateFlag POTION_SPLASH = new StateFlag("potion-splash", true);
@@ -83,6 +85,8 @@ public final class DefaultFlag {
     public static final IntegerFlag FEED_AMOUNT = new IntegerFlag("feed-amount", RegionGroup.ALL);
     public static final IntegerFlag MIN_FOOD = new IntegerFlag("feed-min-hunger", RegionGroup.ALL);
     public static final IntegerFlag MAX_FOOD = new IntegerFlag("feed-max-hunger", RegionGroup.ALL);
+    // public static final IntegerFlag MAX_PLAYERS = new IntegerFlag("max-players-allowed", RegionGroup.ALL);
+    // public static final StringFlag MAX_PLAYERS_MESSAGE = new StringFlag("max-players-reject-message", RegionGroup.ALL);
     public static final LocationFlag TELE_LOC = new LocationFlag("teleport", RegionGroup.MEMBERS);
     public static final LocationFlag SPAWN_LOC = new LocationFlag("spawn", RegionGroup.MEMBERS);
     public static final BooleanFlag BUYABLE = new BooleanFlag("buyable");
@@ -94,10 +98,10 @@ public final class DefaultFlag {
         PASSTHROUGH, BUILD, CONSTRUCT, PVP, CHEST_ACCESS, PISTONS,
         TNT, LIGHTER, USE, PLACE_VEHICLE, DESTROY_VEHICLE, SLEEP,
         MOB_DAMAGE, MOB_SPAWNING, DENY_SPAWN, INVINCIBILITY, EXP_DROPS,
-        CREEPER_EXPLOSION, ENDERDRAGON_BLOCK_DAMAGE, GHAST_FIREBALL, ENDER_BUILD,
+        CREEPER_EXPLOSION, OTHER_EXPLOSION, ENDERDRAGON_BLOCK_DAMAGE, GHAST_FIREBALL, ENDER_BUILD,
         GREET_MESSAGE, FAREWELL_MESSAGE, NOTIFY_ENTER, NOTIFY_LEAVE,
-        EXIT, ENTRY, LIGHTNING, ENTITY_PAINTING_DESTROY,
-        ENTITY_ITEM_FRAME_DESTROY, ITEM_DROP,
+        EXIT, ENTRY, LIGHTNING, ENTITY_PAINTING_DESTROY, ENDERPEARL,
+        ENTITY_ITEM_FRAME_DESTROY, ITEM_DROP, /*MAX_PLAYERS, MAX_PLAYERS_MESSAGE,*/
         HEAL_AMOUNT, HEAL_DELAY, MIN_HEAL, MAX_HEAL,
         FEED_DELAY, FEED_AMOUNT, MIN_FOOD, MAX_FOOD,
         SNOW_FALL, SNOW_MELT, ICE_FORM, ICE_MELT, GAME_MODE,
