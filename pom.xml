@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.sk89q</groupId>
   <artifactId>worldguard</artifactId>
-  <version>5.7.1-tulon-1</version>
+  <version>5.7.1-1.4.7-tulon</version>
   <name>WorldGuard</name>
   <description>WorldGuard protects your Minecraft servers.</description>
   <licenses>
@@ -13,9 +13,18 @@
       <comments>License on all contributions</comments>
     </license>
   </licenses>
+
+  <scm>
+    <connection>scm:git:git://github.com/sk89q/worldguard.git</connection>
+    <url>https://github.com/sk89q/worldguard</url>
+    <tag>master</tag>
+    <developerConnection>scm:git:git@github.com:sk89q/worldguard.git</developerConnection>
+  </scm>
+
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
+
   <repositories>
     <repository>
       <id>ec-repo</id>
@@ -39,13 +48,13 @@
     <dependency>
       <groupId>com.sk89q</groupId>
       <artifactId>worldedit</artifactId>
-      <version>5.4.6-ec-1</version>
+      <version>5.5.2-1.4.7-ec</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.bukkit</groupId>
       <artifactId>bukkit</artifactId>
-      <version>1.4.6-R0.3</version>
+      <version>1.4.7-R0.1</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -89,6 +98,13 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <distributionManagement>
+    <site>
+      <id>sk89q-docs-upload</id>
+      <url>ftp://sk89q-maven-deploy/worldguard/</url>
+    </site>
+  </distributionManagement>
 
   <build>
     <defaultGoal>install</defaultGoal>
