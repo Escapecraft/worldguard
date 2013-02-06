@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.sk89q</groupId>
   <artifactId>worldguard</artifactId>
-  <version>5.7.1-1.4.7-tulon</version>
+  <version>5.7.2-1.4.7-tulon</version>
   <name>WorldGuard</name>
   <description>WorldGuard protects your Minecraft servers.</description>
   <licenses>
@@ -14,13 +14,6 @@
     </license>
   </licenses>
 
-  <scm>
-    <connection>scm:git:git://github.com/sk89q/worldguard.git</connection>
-    <url>https://github.com/sk89q/worldguard</url>
-    <tag>master</tag>
-    <developerConnection>scm:git:git@github.com:sk89q/worldguard.git</developerConnection>
-  </scm>
-
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
@@ -31,16 +24,12 @@
       <url>http://dev.escapecraft.com/maven</url>
     </repository>
     <repository>
-      <id>sk89q-repo</id>
-      <url>http://maven.sk89q.com/repo/</url>
-    </repository>
-    <repository>
-      <id>zml-repo</id>
-      <url>http://files.zachsthings.com/repo</url>
-    </repository>
-    <repository>
       <id>bukkit-repo</id>
       <url>http://repo.bukkit.org/content/groups/public</url>
+    </repository>
+    <repository>
+      <id>sk89q-repo</id>
+      <url>http://maven.sk89q.com/repo/</url>
     </repository>
   </repositories>
 
@@ -98,13 +87,6 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-
-  <distributionManagement>
-    <site>
-      <id>sk89q-docs-upload</id>
-      <url>ftp://sk89q-maven-deploy/worldguard/</url>
-    </site>
-  </distributionManagement>
 
   <build>
     <defaultGoal>install</defaultGoal>
