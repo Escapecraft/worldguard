@@ -570,7 +570,8 @@ public class WorldGuardPlayerListener implements Listener {
 
             if (block.getRelative(event.getBlockFace()).getTypeId() == BlockID.FIRE) {
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
-                        && !set.canBuild(localPlayer)) {
+                        && !mgr.getApplicableRegions(block.getRelative(event.getBlockFace())
+                                .getLocation()).canBuild(localPlayer)) {
                     event.setUseInteractedBlock(Result.DENY);
                     event.setCancelled(true);
                     return;
@@ -664,7 +665,9 @@ public class WorldGuardPlayerListener implements Listener {
         if (wcfg.useRegions) {
             Vector pt = toVector(block);
             RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+            Block placedIn = block.getRelative(event.getBlockFace());
             ApplicableRegionSet set = mgr.getApplicableRegions(pt);
+            ApplicableRegionSet placedInSet = mgr.getApplicableRegions(placedIn.getLocation());
             LocalPlayer localPlayer = plugin.wrapPlayer(player);
 
             if (item.getTypeId() == wcfg.regionWand && plugin.hasPermission(player, "worldguard.region.wand")) {
@@ -689,26 +692,28 @@ public class WorldGuardPlayerListener implements Listener {
                 return;
             }
 
-            Block placedOn = block.getRelative(event.getBlockFace());
             if (item.getTypeId() == BlockID.TNT) {
+                // workaround for a bug that allowed tnt to trigger instantly if placed
+                // next to redstone, without plugins getting the block place event
+                // (not sure if this actually still happens)
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
-                        && !plugin.getGlobalRegionManager().allows(
-                        DefaultFlag.TNT, placedOn.getLocation(), localPlayer)) {
+                        && !placedInSet.allows(DefaultFlag.TNT, localPlayer)) {
                     event.setUseItemInHand(Result.DENY);
                     event.setCancelled(true);
                 }
             }
 
             // hacky workaround for craftbukkit bug
+            // has since been fixed, but leaving for legacy
             if (item.getTypeId() == BlockID.STEP
                     || item.getTypeId() == BlockID.WOODEN_STEP) {
                 if (!plugin.getGlobalRegionManager().hasBypass(localPlayer, world)) {
                     boolean cancel = false;
                     if ((block.getTypeId() == item.getTypeId()) 
-                        && !plugin.getGlobalRegionManager().canBuild(player, block.getLocation())) {
+                        && !set.canBuild(localPlayer)) {
                     // if we are on a step already, the new block will end up in the same block as the interact
                         cancel = true;
-                    } else if (!plugin.getGlobalRegionManager().canBuild(player, placedOn.getLocation())) {
+                    } else if (!placedInSet.canBuild(localPlayer)) {
                     // if we are on another block, the half-slab in hand will be pushed to the adjacent block
                         cancel = true;
                     }
@@ -740,13 +745,51 @@ public class WorldGuardPlayerListener implements Listener {
                     b0 = 1;
                 }
                 // end mojang-level code
-                Block headLoc = placedOn.getRelative(b0, 0, b1);
+                Location headLoc = placedIn.getRelative(b0, 0, b1).getLocation();
                 if (!plugin.getGlobalRegionManager().hasBypass(localPlayer, world) 
-                        && !(plugin.canBuild(player, block) && plugin.canBuild(player, headLoc))) {
+                        && !mgr.getApplicableRegions(headLoc).canBuild(localPlayer)) {
                     // note that normal block placement is handled later, this is just a workaround
                     // for the location of the head block of the bed
                     player.sendMessage(ChatColor.DARK_RED + "You don't have permission for this area.");
                     event.setCancelled(true);
+                    return;
+                }
+            }
+
+            if (block.getTypeId() == BlockID.PISTON_MOVING_PIECE) {
+                if (!plugin.getGlobalRegionManager().hasBypass(player, world)
+                        && !set.canBuild(localPlayer)) {
+                    event.setUseInteractedBlock(Result.DENY);
+                }
+            }
+
+            if (item.getTypeId() == ItemID.WOODEN_DOOR_ITEM || item.getTypeId() == ItemID.IRON_DOOR_ITEM) {
+                if (!plugin.getGlobalRegionManager().hasBypass(localPlayer, world)
+                        && !placedInSet.canBuild(localPlayer)) {
+                    // note that normal block placement is handled later, this is just a workaround
+                    // for the location of the top block of the door
+                    player.sendMessage(ChatColor.DARK_RED + "You don't have permission for this area.");
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+
+            if (item.getTypeId() == ItemID.FIRE_CHARGE || item.getTypeId() == ItemID.FLINT_AND_TINDER) {
+                if (!plugin.getGlobalRegionManager().hasBypass(localPlayer, world)
+                        && !placedInSet.allows(DefaultFlag.LIGHTER, localPlayer)) {
+                    event.setCancelled(true);
+                    event.setUseItemInHand(Result.DENY);
+                    player.sendMessage(ChatColor.DARK_RED + "You're not allowed to use that here.");
+                    return;
+                }
+            }
+
+            if (item.getTypeId() == ItemID.EYE_OF_ENDER && block.getTypeId() == BlockID.END_PORTAL_FRAME) {
+                if (!plugin.getGlobalRegionManager().hasBypass(player, world)
+                        && !set.canBuild(localPlayer)) {
+                    event.setCancelled(true);
+                    event.setUseItemInHand(Result.DENY);
+                    player.sendMessage(ChatColor.DARK_RED + "You're not allowed to use that here.");
                     return;
                 }
             }
@@ -819,7 +862,10 @@ public class WorldGuardPlayerListener implements Listener {
                     || type == BlockID.DISPENSER
                     || type == BlockID.FURNACE
                     || type == BlockID.BURNING_FURNACE
-                    || type == BlockID.BREWING_STAND) {
+                    || type == BlockID.BREWING_STAND
+                    || type == BlockID.TRAPPED_CHEST
+                    || type == BlockID.HOPPER
+                    || type == BlockID.DROPPER) {
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
                         && !set.canBuild(localPlayer)
                         && !set.allows(DefaultFlag.CHEST_ACCESS, localPlayer)) {
@@ -859,10 +905,26 @@ public class WorldGuardPlayerListener implements Listener {
                     || type == BlockID.CAULDRON
                     || type == BlockID.ENDER_CHEST // blah
                     || type == BlockID.BEACON
-                    || type == BlockID.ANVIL) {
+                    || type == BlockID.ANVIL
+                    || type == BlockID.HOPPER
+                    || type == BlockID.DROPPER) {
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
                         && !set.canBuild(localPlayer)
                         && !set.allows(DefaultFlag.USE, localPlayer)) {
+                    player.sendMessage(ChatColor.DARK_RED + "You don't have permission to use that in this area.");
+                    event.setUseInteractedBlock(Result.DENY);
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+
+            if (type == BlockID.REDSTONE_REPEATER_OFF
+                    || type == BlockID.REDSTONE_REPEATER_ON
+                    || type == BlockID.COMPARATOR_OFF
+                    || type == BlockID.COMPARATOR_ON) {
+                if (!plugin.getGlobalRegionManager().hasBypass(player, world)
+                        && !set.canBuild(localPlayer)) {
+                    // using build and not use because it can potentially damage a circuit and use is more general-purposed
                     player.sendMessage(ChatColor.DARK_RED + "You don't have permission to use that in this area.");
                     event.setUseInteractedBlock(Result.DENY);
                     event.setCancelled(true);
@@ -884,10 +946,12 @@ public class WorldGuardPlayerListener implements Listener {
             if (BlockType.isRailBlock(type)
                     && (item.getTypeId() == ItemID.MINECART
                     || item.getTypeId() == ItemID.POWERED_MINECART
-                    || item.getTypeId() == ItemID.STORAGE_MINECART)) {
+                    || item.getTypeId() == ItemID.STORAGE_MINECART
+                    || item.getTypeId() == ItemID.TNT_MINECART
+                    || item.getTypeId() == ItemID.HOPPER_MINECART)) {
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
-                        && !set.canBuild(localPlayer)
-                        && !set.allows(DefaultFlag.PLACE_VEHICLE, localPlayer)) {
+                        && !placedInSet.canBuild(localPlayer)
+                        && !placedInSet.allows(DefaultFlag.PLACE_VEHICLE, localPlayer)) {
                     player.sendMessage(ChatColor.DARK_RED + "You don't have permission to place vehicles here.");
                     event.setUseItemInHand(Result.DENY);
                     event.setCancelled(true);
@@ -897,8 +961,8 @@ public class WorldGuardPlayerListener implements Listener {
 
             if (item.getTypeId() == ItemID.WOOD_BOAT) {
                 if (!plugin.getGlobalRegionManager().hasBypass(player, world)
-                        && !set.canBuild(localPlayer)
-                        && !set.allows(DefaultFlag.PLACE_VEHICLE, localPlayer)) {
+                        && !placedInSet.canBuild(localPlayer)
+                        && !placedInSet.allows(DefaultFlag.PLACE_VEHICLE, localPlayer)) {
                     player.sendMessage(ChatColor.DARK_RED + "You don't have permission to place vehicles here.");
                     event.setUseItemInHand(Result.DENY);
                     event.setCancelled(true);
@@ -908,7 +972,7 @@ public class WorldGuardPlayerListener implements Listener {
         }
 
         if (wcfg.getBlacklist() != null) {
-            if (player.isSneaking() // sneak + right clicking no longer activates blocks as of some recent version
+            if (player.isSneaking() // sneak + right clicking no longer opens guis as of some recent version
                     || (type != BlockID.CHEST
                     && type != BlockID.DISPENSER
                     && type != BlockID.FURNACE
@@ -916,7 +980,10 @@ public class WorldGuardPlayerListener implements Listener {
                     && type != BlockID.BREWING_STAND
                     && type != BlockID.ENCHANTMENT_TABLE
                     && type != BlockID.ANVIL
-                    && type != BlockID.ENDER_CHEST)) {
+                    && type != BlockID.ENDER_CHEST
+                    && type != BlockID.TRAPPED_CHEST
+                    && type != BlockID.HOPPER
+                    && type != BlockID.DROPPER)) {
                 if (!wcfg.getBlacklist().check(
                         new ItemUseBlacklistEvent(plugin.wrapPlayer(player), toVector(block),
                                 item.getTypeId()), false, false)) {
@@ -952,7 +1019,10 @@ public class WorldGuardPlayerListener implements Listener {
                 || type == BlockID.FURNACE
                 || type == BlockID.BURNING_FURNACE
                 || type == BlockID.ENCHANTMENT_TABLE
-                || type == BlockID.BREWING_STAND)) {
+                || type == BlockID.BREWING_STAND
+                || type == BlockID.TRAPPED_CHEST
+                || type == BlockID.HOPPER
+                || type == BlockID.DROPPER)) {
 
             if (wcfg.isChestProtected(block, player)) {
                 player.sendMessage(ChatColor.DARK_RED + "The chest is protected.");
@@ -1040,7 +1110,8 @@ public class WorldGuardPlayerListener implements Listener {
             LocalPlayer localPlayer = plugin.wrapPlayer(player);
 
             if (type == BlockID.STONE_PRESSURE_PLATE || type == BlockID.WOODEN_PRESSURE_PLATE
-                    || type == BlockID.TRIPWIRE) {
+                    || type == BlockID.TRIPWIRE || type == BlockID.PRESSURE_PLATE_LIGHT
+                    || type == BlockID.PRESSURE_PLATE_HEAVY) {
                if (!plugin.getGlobalRegionManager().hasBypass(player, world)
                        && !set.canBuild(localPlayer)
                        && !set.allows(DefaultFlag.USE, localPlayer)) {
@@ -1171,7 +1242,8 @@ public class WorldGuardPlayerListener implements Listener {
         WorldConfiguration wcfg = cfg.get(world);
 
         if (!plugin.getGlobalRegionManager().canBuild(
-                player, event.getBlockClicked().getRelative(event.getBlockFace()))) {
+                player, event.getBlockClicked().getRelative(event.getBlockFace()))
+                && !(event.getBucket().getId() == ItemID.MILK_BUCKET)) {
             player.sendMessage(ChatColor.DARK_RED + "You don't have permission for this area.");
             event.setCancelled(true);
             return;

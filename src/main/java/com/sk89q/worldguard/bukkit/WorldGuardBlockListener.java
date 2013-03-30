@@ -33,6 +33,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.block.BlockDispenseEvent;
+import org.bukkit.event.block.BlockExpEvent;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
@@ -139,7 +140,7 @@ public class WorldGuardBlockListener implements Listener {
             if (held.getTypeId() > 0
                     && !(ItemType.usesDamageValue(held.getTypeId())
                     || BlockType.usesData(held.getTypeId()))) {
-                held.setDurability((short) -1);
+                held.setDurability((short) 0);
                 player.setItemInHand(held);
             }
         }
@@ -339,10 +340,6 @@ public class WorldGuardBlockListener implements Listener {
                 LocalPlayer localPlayer = plugin.wrapPlayer(player);
 
                 if (cause == IgniteCause.FLINT_AND_STEEL || cause == IgniteCause.FIREBALL) {
-                    if (!set.canBuild(localPlayer)) {
-                        event.setCancelled(true);
-                        return;
-                    }
                     if (!set.allows(DefaultFlag.LIGHTER, localPlayer)
                             && !plugin.hasPermission(player, "worldguard.override.lighter")) {
                         event.setCancelled(true);
@@ -872,4 +869,18 @@ public class WorldGuardBlockListener implements Listener {
             }
         }
     }
+
+    /*
+     * Called when a block yields exp
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBlockExp(BlockExpEvent event) {
+        ConfigurationManager cfg = plugin.getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(event.getBlock().getWorld());
+        if (wcfg.disableExpDrops || !plugin.getGlobalRegionManager().allows(DefaultFlag.EXP_DROPS,
+                event.getBlock().getLocation())) {
+            event.setExpToDrop(0);
+        }
+    }
+
 }
