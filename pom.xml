@@ -40,7 +40,7 @@
     <dependency>
       <groupId>com.sk89q</groupId>
       <artifactId>worldedit</artifactId>
-      <version>5.5.3-1.5-ec</version>
+      <version>5.5.6-1.5-ec</version>
       <scope>compile</scope>
     </dependency>
     
