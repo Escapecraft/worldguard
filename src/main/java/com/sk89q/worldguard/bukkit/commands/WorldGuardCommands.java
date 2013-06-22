@@ -34,7 +34,6 @@ import com.sk89q.minecraft.util.commands.CommandException;
 import com.sk89q.minecraft.util.commands.CommandPermissions;
 import com.sk89q.worldguard.bukkit.LoggerToChatHandler;
 import com.sk89q.worldguard.bukkit.ReportWriter;
-import com.sk89q.worldguard.bukkit.WGBukkit;
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.util.PastebinPoster;
 import com.sk89q.worldguard.util.PastebinPoster.PasteCallback;
@@ -73,7 +72,7 @@ public class WorldGuardCommands {
             plugin.getGlobalRegionManager().unload();
             plugin.getGlobalStateManager().load();
             plugin.getGlobalRegionManager().preload();
-            WGBukkit.cleanCache();
+            // WGBukkit.cleanCache();
             sender.sendMessage("WorldGuard configuration reloaded.");
         } catch (Throwable t) {
             sender.sendMessage("Error while reloading: "

@@ -40,7 +40,7 @@ public final class DefaultFlag {
     public static final StateFlag OTHER_EXPLOSION = new StateFlag("other-explosion", true);
     public static final StateFlag SLEEP = new StateFlag("sleep", true);
     public static final StateFlag TNT = new StateFlag("tnt", true, RegionGroup.ALL);
-    public static final StateFlag LIGHTER = new StateFlag("lighter", true, RegionGroup.MEMBERS);
+    public static final StateFlag LIGHTER = new StateFlag("lighter", true);
     public static final StateFlag FIRE_SPREAD = new StateFlag("fire-spread", true);
     public static final StateFlag LAVA_FIRE = new StateFlag("lava-fire", true);
     public static final StateFlag LIGHTNING = new StateFlag("lightning", true);
@@ -118,5 +118,21 @@ public final class DefaultFlag {
 
     public static Flag<?>[] getFlags() {
         return flagsList;
+    }
+    
+    /**
+     * Try to match the flag with the given ID using a fuzzy name match.
+     * 
+     * @param id the flag ID
+     * @return a flag, or null
+     */
+    public static Flag<?> fuzzyMatchFlag(String id) {
+        for (Flag<?> flag : DefaultFlag.getFlags()) {
+            if (flag.getName().replace("-", "").equalsIgnoreCase(id.replace("-", ""))) {
+                return flag;
+            }
+        }
+        
+        return null;
     }
 }
