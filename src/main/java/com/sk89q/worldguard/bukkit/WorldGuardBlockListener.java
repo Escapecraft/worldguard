@@ -18,7 +18,7 @@
  */
 package com.sk89q.worldguard.bukkit;
 
-import static com.sk89q.worldguard.bukkit.BukkitUtil.toVector;
+import static com.sk89q.worldguard.bukkit.BukkitUtil.*;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -26,6 +26,7 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Snowman;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -45,6 +46,7 @@ import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
+import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.inventory.ItemStack;
@@ -339,8 +341,11 @@ public class WorldGuardBlockListener implements Listener {
             if (player != null && !plugin.getGlobalRegionManager().hasBypass(player, world)) {
                 LocalPlayer localPlayer = plugin.wrapPlayer(player);
 
+                // this is preliminarily handled in the player listener under handleBlockRightClick
+                // why it's handled here too, no one knows
                 if (cause == IgniteCause.FLINT_AND_STEEL || cause == IgniteCause.FIREBALL) {
-                    if (!set.allows(DefaultFlag.LIGHTER, localPlayer)
+                    if (!set.allows(DefaultFlag.LIGHTER)
+                            && !set.canBuild(localPlayer)
                             && !plugin.hasPermission(player, "worldguard.override.lighter")) {
                         event.setCancelled(true);
                         return;
@@ -699,6 +704,27 @@ public class WorldGuardBlockListener implements Listener {
             }
             if (wcfg.useRegions && !plugin.getGlobalRegionManager().allows(
                     DefaultFlag.SNOW_FALL, event.getBlock().getLocation())) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+
+    /*
+     * Called when a block is formed by an entity.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityBlockForm(EntityBlockFormEvent event) {
+        ConfigurationManager cfg = plugin.getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(event.getBlock().getWorld());
+
+        if (cfg.activityHaltToggle) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (event.getEntity() instanceof Snowman) {
+            if (wcfg.disableSnowmanTrails) {
                 event.setCancelled(true);
                 return;
             }
