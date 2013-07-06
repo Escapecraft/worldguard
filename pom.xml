@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.sk89q</groupId>
   <artifactId>worldguard</artifactId>
-  <version>5.7.6-tulon-1</version>
+  <version>5.7.6-1.6.1-tulon</version>
   <packaging>jar</packaging>
   
   <!-- Project information -->
@@ -24,7 +24,7 @@
   <repositories>
     <repository>
       <id>ec-repo</id>
-      <url>http://dev.escapecraft.com/maven</url>
+      <url>http://dev.escapecraft.com/maven/</url>
     </repository>
     <repository>
       <id>sk89q-repo</id>
