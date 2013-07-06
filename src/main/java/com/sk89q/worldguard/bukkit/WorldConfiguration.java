@@ -19,6 +19,22 @@
 
 package com.sk89q.worldguard.bukkit;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Level;
+
+import org.bukkit.block.Block;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.potion.PotionEffectType;
+
 import com.sk89q.util.yaml.YAMLFormat;
 import com.sk89q.util.yaml.YAMLProcessor;
 import com.sk89q.worldguard.blacklist.Blacklist;
@@ -28,16 +44,6 @@ import com.sk89q.worldguard.blacklist.loggers.DatabaseLoggerHandler;
 import com.sk89q.worldguard.blacklist.loggers.FileLoggerHandler;
 import com.sk89q.worldguard.chest.ChestProtection;
 import com.sk89q.worldguard.chest.SignChestProtection;
-import org.bukkit.block.Block;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Player;
-import org.bukkit.potion.PotionEffectType;
-
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.*;
-import java.util.logging.Level;
 
 /**
  * Holds the configuration for individual worlds.
@@ -69,6 +75,7 @@ public class WorldConfiguration {
     private ChestProtection chestProtection = new SignChestProtection();
 
     /* Configuration data start */
+    public boolean summaryOnStart;
     public boolean opPermissions;
     public boolean fireSpreadDisableToggle;
     public boolean itemDurability;
@@ -98,12 +105,15 @@ public class WorldConfiguration {
     public boolean blockWitherSkullExplosions;
     public boolean blockWitherSkullBlockDamage;
     public boolean blockEnderDragonBlockDamage;
+    public boolean blockEnderDragonPortalCreation;
     public boolean blockFireballExplosions;
     public boolean blockFireballBlockDamage;
+    public boolean blockOtherExplosions;
     public boolean blockEntityPaintingDestroy;
     public boolean blockEntityItemFrameDestroy;
     public boolean blockPluginSpawning;
     public boolean blockGroundSlimes;
+    public boolean blockZombieDoorDestruction;
     public boolean disableContactDamage;
     public boolean disableFallDamage;
     public boolean disableLavaDamage;
@@ -153,7 +163,9 @@ public class WorldConfiguration {
     public boolean disableLeafDecay;
     public boolean disableGrassGrowth;
     public boolean disableMyceliumSpread;
+    public boolean disableVineGrowth;
     public boolean disableEndermanGriefing;
+    public boolean disableSnowmanTrails;
     public boolean regionInvinciblityRemovesMobs;
     public boolean disableDeathMessages;
     public boolean disableObsidianGenerators;
@@ -184,7 +196,9 @@ public class WorldConfiguration {
         config = new YAMLProcessor(configFile, true, YAMLFormat.EXTENDED);
         loadConfiguration();
 
-        plugin.getLogger().info("Loaded configuration for world '" + worldName + "'");
+        if (summaryOnStart) {
+            plugin.getLogger().info("Loaded configuration for world '" + worldName + "'");
+        }
     }
 
     private boolean getBoolean(String node, boolean def) {
@@ -290,6 +304,7 @@ public class WorldConfiguration {
             e.printStackTrace();
         }
 
+        summaryOnStart = getBoolean("summary-on-start", true);
         opPermissions = getBoolean("op-permissions", true);
 
         itemDurability = getBoolean("protection.item-durability", true);
@@ -338,14 +353,18 @@ public class WorldConfiguration {
         blockWitherSkullExplosions = getBoolean("mobs.block-wither-skull-explosions", false);
         blockWitherSkullBlockDamage = getBoolean("mobs.block-wither-skull-block-damage", false);
         blockEnderDragonBlockDamage = getBoolean("mobs.block-enderdragon-block-damage", false);
+        blockEnderDragonPortalCreation = getBoolean("mobs.block-enderdragon-portal-creation", false);
         blockFireballExplosions = getBoolean("mobs.block-fireball-explosions", false);
         blockFireballBlockDamage = getBoolean("mobs.block-fireball-block-damage", false);
         antiWolfDumbness = getBoolean("mobs.anti-wolf-dumbness", false);
         disableEndermanGriefing = getBoolean("mobs.disable-enderman-griefing", false);
+        disableSnowmanTrails = getBoolean("mobs.disable-snowman-trails", false);
         blockEntityPaintingDestroy = getBoolean("mobs.block-painting-destroy", false);
         blockEntityItemFrameDestroy = getBoolean("mobs.block-item-frame-destroy", false);
         blockPluginSpawning = getBoolean("mobs.block-plugin-spawning", true);
         blockGroundSlimes = getBoolean("mobs.block-above-ground-slimes", false);
+        blockOtherExplosions = getBoolean("mobs.block-other-explosions", false);
+        blockZombieDoorDestruction = getBoolean("mobs.block-zombie-door-destruction", false);
 
         disableFallDamage = getBoolean("player-damage.disable-fall-damage", false);
         disableLavaDamage = getBoolean("player-damage.disable-lava-damage", false);
@@ -384,6 +403,7 @@ public class WorldConfiguration {
         disableLeafDecay = getBoolean("dynamics.disable-leaf-decay", false);
         disableGrassGrowth = getBoolean("dynamics.disable-grass-growth", false);
         disableMyceliumSpread = getBoolean("dynamics.disable-mycelium-spread", false);
+        disableVineGrowth = getBoolean("dynamics.disable-vine-growth", false);
 
         useRegions = getBoolean("regions.enable", true);
         regionInvinciblityRemovesMobs = getBoolean("regions.invincibility-removes-mobs", false);
@@ -460,7 +480,9 @@ public class WorldConfiguration {
                 this.blacklist = null;
             } else {
                 this.blacklist = blist;
-                plugin.getLogger().log(Level.INFO, "Blacklist loaded.");
+                if (summaryOnStart) {
+                    plugin.getLogger().log(Level.INFO, "Blacklist loaded.");
+                }
 
                 BlacklistLogger blacklistLogger = blist.getLogger();
 
@@ -486,7 +508,7 @@ public class WorldConfiguration {
         }
 
         // Print an overview of settings
-        if (getBoolean("summary-on-start", true)) {
+        if (summaryOnStart) {
             plugin.getLogger().log(Level.INFO, blockTNTExplosions
                     ? "(" + worldName + ") TNT ignition is blocked."
                     : "(" + worldName + ") TNT ignition is PERMITTED.");
@@ -571,7 +593,9 @@ public class WorldConfiguration {
         for (String group : plugin.getGroups(player)) {
             if (maxRegionCounts.containsKey(group)) {
                 int groupMax = maxRegionCounts.get(group);
-                if (max < groupMax) max = groupMax;
+                if (max < groupMax) {
+                    max = groupMax;
+                }
             }
         }
         if (max <= -1) {

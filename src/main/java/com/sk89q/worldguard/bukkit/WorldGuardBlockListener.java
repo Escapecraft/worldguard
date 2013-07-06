@@ -18,6 +18,41 @@
  */
 package com.sk89q.worldguard.bukkit;
 
+import static com.sk89q.worldguard.bukkit.BukkitUtil.*;
+
+import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Snowman;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockBurnEvent;
+import org.bukkit.event.block.BlockDamageEvent;
+import org.bukkit.event.block.BlockDispenseEvent;
+import org.bukkit.event.block.BlockExpEvent;
+import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFormEvent;
+import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockIgniteEvent;
+import org.bukkit.event.block.BlockIgniteEvent.IgniteCause;
+import org.bukkit.event.block.BlockPhysicsEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockRedstoneEvent;
+import org.bukkit.event.block.BlockSpreadEvent;
+import org.bukkit.event.block.EntityBlockFormEvent;
+import org.bukkit.event.block.LeavesDecayEvent;
+import org.bukkit.event.block.SignChangeEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.Potion;
+import org.bukkit.potion.PotionEffect;
+
 import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.blocks.BlockID;
 import com.sk89q.worldedit.blocks.BlockType;
@@ -29,22 +64,6 @@ import com.sk89q.worldguard.blacklist.events.DestroyWithBlacklistEvent;
 import com.sk89q.worldguard.protection.ApplicableRegionSet;
 import com.sk89q.worldguard.protection.flags.DefaultFlag;
 import com.sk89q.worldguard.protection.managers.RegionManager;
-import org.bukkit.ChatColor;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.block.Block;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.*;
-import org.bukkit.event.block.BlockIgniteEvent.IgniteCause;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.potion.Potion;
-import org.bukkit.potion.PotionEffect;
-
-import static com.sk89q.worldguard.bukkit.BukkitUtil.toVector;
 
 /**
  * The listener for block events.
@@ -123,7 +142,7 @@ public class WorldGuardBlockListener implements Listener {
             if (held.getTypeId() > 0
                     && !(ItemType.usesDamageValue(held.getTypeId())
                     || BlockType.usesData(held.getTypeId()))) {
-                held.setDurability((short) -1);
+                held.setDurability((short) 0);
                 player.setItemInHand(held);
             }
         }
@@ -322,12 +341,11 @@ public class WorldGuardBlockListener implements Listener {
             if (player != null && !plugin.getGlobalRegionManager().hasBypass(player, world)) {
                 LocalPlayer localPlayer = plugin.wrapPlayer(player);
 
+                // this is preliminarily handled in the player listener under handleBlockRightClick
+                // why it's handled here too, no one knows
                 if (cause == IgniteCause.FLINT_AND_STEEL || cause == IgniteCause.FIREBALL) {
-                    if (!set.canBuild(localPlayer)) {
-                        event.setCancelled(true);
-                        return;
-                    }
-                    if (!set.allows(DefaultFlag.LIGHTER, localPlayer)
+                    if (!set.allows(DefaultFlag.LIGHTER)
+                            && !set.canBuild(localPlayer)
                             && !plugin.hasPermission(player, "worldguard.override.lighter")) {
                         event.setCancelled(true);
                         return;
@@ -345,6 +363,14 @@ public class WorldGuardBlockListener implements Listener {
                     && !set.allows(DefaultFlag.LAVA_FIRE)) {
                 event.setCancelled(true);
                 return;
+            }
+
+            if (cause == IgniteCause.FIREBALL && event.getPlayer() == null) {
+                // wtf bukkit, FIREBALL is supposed to be reserved to players
+                if (!set.allows(DefaultFlag.GHAST_FIREBALL)) {
+                    event.setCancelled(true);
+                    return;
+                }
             }
 
             if (cause == IgniteCause.LIGHTNING && !set.allows(DefaultFlag.LIGHTNING)) {
@@ -685,6 +711,27 @@ public class WorldGuardBlockListener implements Listener {
     }
 
     /*
+     * Called when a block is formed by an entity.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityBlockForm(EntityBlockFormEvent event) {
+        ConfigurationManager cfg = plugin.getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(event.getBlock().getWorld());
+
+        if (cfg.activityHaltToggle) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (event.getEntity() instanceof Snowman) {
+            if (wcfg.disableSnowmanTrails) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+
+    /*
      * Called when a block spreads based on world conditions.
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -732,6 +779,20 @@ public class WorldGuardBlockListener implements Listener {
             if (wcfg.useRegions
                     && !plugin.getGlobalRegionManager().allows(
                             DefaultFlag.MYCELIUM_SPREAD, event.getBlock().getLocation())) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        if (fromType == BlockID.VINE) {
+            if (wcfg.disableVineGrowth) {
+                event.setCancelled(true);
+                return;
+            }
+
+            if (wcfg.useRegions
+                    && !plugin.getGlobalRegionManager().allows(
+                            DefaultFlag.VINE_GROWTH, event.getBlock().getLocation())) {
                 event.setCancelled(true);
                 return;
             }
@@ -834,4 +895,18 @@ public class WorldGuardBlockListener implements Listener {
             }
         }
     }
+
+    /*
+     * Called when a block yields exp
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBlockExp(BlockExpEvent event) {
+        ConfigurationManager cfg = plugin.getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(event.getBlock().getWorld());
+        if (wcfg.disableExpDrops || !plugin.getGlobalRegionManager().allows(DefaultFlag.EXP_DROPS,
+                event.getBlock().getLocation())) {
+            event.setExpToDrop(0);
+        }
+    }
+
 }

@@ -18,7 +18,6 @@
 
 package com.sk89q.worldguard.bukkit;
 
-import org.bukkit.Bukkit;
 import org.bukkit.World;
 
 import com.sk89q.worldguard.protection.managers.RegionManager;
@@ -42,7 +41,16 @@ public class WGBukkit {
      * @return the WorldGuard plugin or null
      */
     public static WorldGuardPlugin getPlugin() {
-        return (WorldGuardPlugin) Bukkit.getServer().getPluginManager().getPlugin("WorldGuard");
+        return WorldGuardPlugin.inst();
+    }
+
+    /**
+     * Set cache to null for reload WorldGuardPlugin
+     * @deprecated instance is now stored directly in {@link WorldGuardPlugin}
+     */
+    @Deprecated
+    public static void cleanCache() {
+        // do nothing - plugin instance is stored in plugin class now
     }
 
     /**
@@ -53,12 +61,10 @@ public class WGBukkit {
      * @return a region manager or null
      */
     public static RegionManager getRegionManager(World world) {
-        WorldGuardPlugin plugin = getPlugin();
-        if (plugin == null) {
+        if (getPlugin() == null) {
             return null;
         }
-
-        return plugin.getRegionManager(world);
+        return WorldGuardPlugin.inst().getRegionManager(world);
     }
 
 }

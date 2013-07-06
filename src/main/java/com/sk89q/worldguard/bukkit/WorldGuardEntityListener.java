@@ -18,6 +18,57 @@
  */
 package com.sk89q.worldguard.bukkit;
 
+import static com.sk89q.worldguard.bukkit.BukkitUtil.toVector;
+
+import java.util.Set;
+
+import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Creeper;
+import org.bukkit.entity.EnderDragon;
+import org.bukkit.entity.EnderPearl;
+import org.bukkit.entity.Enderman;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Fireball;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.TNTPrimed;
+import org.bukkit.entity.Tameable;
+import org.bukkit.entity.ThrownPotion;
+import org.bukkit.entity.Wither;
+import org.bukkit.entity.WitherSkull;
+import org.bukkit.entity.Wolf;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
+import org.bukkit.event.entity.CreeperPowerEvent;
+import org.bukkit.event.entity.EntityBreakDoorEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
+import org.bukkit.event.entity.EntityCombustEvent;
+import org.bukkit.event.entity.EntityCreatePortalEvent;
+import org.bukkit.event.entity.EntityDamageByBlockEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.entity.EntityInteractEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.entity.ExpBottleEvent;
+import org.bukkit.event.entity.ExplosionPrimeEvent;
+import org.bukkit.event.entity.FoodLevelChangeEvent;
+import org.bukkit.event.entity.PigZapEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.entity.PotionSplashEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+
 import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.blocks.BlockID;
 import com.sk89q.worldguard.LocalPlayer;
@@ -27,24 +78,6 @@ import com.sk89q.worldguard.protection.GlobalRegionManager;
 import com.sk89q.worldguard.protection.events.DisallowedPVPEvent;
 import com.sk89q.worldguard.protection.flags.DefaultFlag;
 import com.sk89q.worldguard.protection.managers.RegionManager;
-import org.bukkit.ChatColor;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.block.Block;
-import org.bukkit.entity.*;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.entity.*;
-import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
-import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.potion.PotionEffect;
-
-import java.util.Set;
-
-import static com.sk89q.worldguard.bukkit.BukkitUtil.toVector;
 
 /**
  * Listener for entity related events.
@@ -54,9 +87,8 @@ import static com.sk89q.worldguard.bukkit.BukkitUtil.toVector;
 public class WorldGuardEntityListener implements Listener {
 
     private WorldGuardPlugin plugin;
-    private EntityType fireballType;
-    private EntityType witherType;
-    private EntityType witherSkullType;
+
+    private EntityType tntMinecartType;
 
     /**
      * Construct the object;
@@ -65,10 +97,7 @@ public class WorldGuardEntityListener implements Listener {
      */
     public WorldGuardEntityListener(WorldGuardPlugin plugin) {
         this.plugin = plugin;
-
-        fireballType = BukkitUtil.tryEnum(EntityType.class, "LARGE_FIREBALL", "FIREBALL");
-        witherType = BukkitUtil.tryEnum(EntityType.class, "WITHER");
-        witherSkullType = BukkitUtil.tryEnum(EntityType.class, "WITHER_SKULL");
+        tntMinecartType = BukkitUtil.tryEnum(EntityType.class, "MINECART_TNT");
     }
 
     /**
@@ -87,9 +116,21 @@ public class WorldGuardEntityListener implements Listener {
         WorldConfiguration wcfg = cfg.get(entity.getWorld());
 
         if (block.getTypeId() == BlockID.SOIL) {
-            if (entity instanceof Creature && wcfg.disableCreatureCropTrampling) {
+            if (/* entity instanceof Creature && // catch for any entity (not thrown for players) */
+                wcfg.disableCreatureCropTrampling) {
                 event.setCancelled(true);
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onExpBottle(ExpBottleEvent event) {
+        WorldConfiguration wcfg = plugin.getGlobalStateManager().get(event.getEntity().getWorld());
+
+        if (wcfg.disableExpDrops || !plugin.getGlobalRegionManager().allows(DefaultFlag.EXP_DROPS,
+                event.getEntity().getLocation())) {
+            event.setExperience(0);
+            // event.setShowEffect(false); // don't want to cancel the bottle entirely I suppose, just the exp
         }
     }
 
@@ -149,7 +190,19 @@ public class WorldGuardEntityListener implements Listener {
                 return;
             }
 
-            if (wcfg.disableExplosionDamage && type == DamageCause.BLOCK_EXPLOSION) {
+            if (type == DamageCause.BLOCK_EXPLOSION
+                    && (wcfg.disableExplosionDamage || wcfg.blockOtherExplosions
+                            || !plugin.getGlobalRegionManager().allows(DefaultFlag.OTHER_EXPLOSION, player.getLocation()))) {
+                event.setCancelled(true);
+                return;
+            }
+        } else {
+
+            // for whatever reason, plugin-caused explosions with a null entity count as block explosions and aren't
+            // handled anywhere else
+            if (type == DamageCause.BLOCK_EXPLOSION
+                    && (wcfg.blockOtherExplosions
+                            || !plugin.getGlobalRegionManager().allows(DefaultFlag.OTHER_EXPLOSION, defender.getLocation()))) {
                 event.setCancelled(true);
                 return;
             }
@@ -209,97 +262,130 @@ public class WorldGuardEntityListener implements Listener {
                 return;
             }
 
-            if (wcfg.disableExplosionDamage && event.getCause() == DamageCause.ENTITY_EXPLOSION) {
-                event.setCancelled(true);
-                return;
+            if (wcfg.disableExplosionDamage) {
+                switch (event.getCause()) {
+                    case BLOCK_EXPLOSION:
+                    case ENTITY_EXPLOSION:
+                        event.setCancelled(true);
+                        return;
+                }
             }
 
-            if (attacker != null && attacker instanceof Player) {
-                if (wcfg.useRegions) {
-                    Vector pt = toVector(defender.getLocation());
-                    Vector pt2 = toVector(attacker.getLocation());
-                    RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
+            if (attacker != null) {
+                if (attacker instanceof Player) {
+                    if (wcfg.useRegions) {
+                        Vector pt = toVector(defender.getLocation());
+                        Vector pt2 = toVector(attacker.getLocation());
+                        RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
 
-                    if (!mgr.getApplicableRegions(pt2).allows(DefaultFlag.PVP, plugin.wrapPlayer((Player) attacker))) {
-                        tryCancelPVPEvent((Player) attacker, player, event, true);
-                    } else if (!mgr.getApplicableRegions(pt).allows(DefaultFlag.PVP ,localPlayer)) {
-                        tryCancelPVPEvent((Player) attacker, player, event, false);
+                        if (!mgr.getApplicableRegions(pt2).allows(DefaultFlag.PVP, plugin.wrapPlayer((Player) attacker))) {
+                            tryCancelPVPEvent((Player) attacker, player, event, true);
+                        } else if (!mgr.getApplicableRegions(pt).allows(DefaultFlag.PVP ,localPlayer)) {
+                            tryCancelPVPEvent((Player) attacker, player, event, false);
+                        }
                     }
                 }
-            }
 
-            if (attacker != null && attacker instanceof TNTPrimed) {
-                if (wcfg.blockTNTExplosions) {
-                    event.setCancelled(true);
-                    return;
-                }
-                if (wcfg.useRegions) {
-                    Vector pt = toVector(defender.getLocation());
-                    RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
-                    ApplicableRegionSet set = mgr.getApplicableRegions(pt);
-                    if (!set.allows(DefaultFlag.TNT, localPlayer)) {
+                if (attacker instanceof TNTPrimed || attacker.getType() == tntMinecartType) {
+
+                    // The check for explosion damage should be handled already... But... What ever...
+                    if (wcfg.blockTNTExplosions) {
                         event.setCancelled(true);
                         return;
                     }
+                    if (wcfg.useRegions) {
+                        Vector pt = toVector(defender.getLocation());
+                        RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
+                        ApplicableRegionSet set = mgr.getApplicableRegions(pt);
+                        if (!set.allows(DefaultFlag.TNT, localPlayer)) {
+                            event.setCancelled(true);
+                            return;
+                        }
+                    }
                 }
-            }
 
-            if (attacker != null && attacker instanceof Fireball) {
-                if (wcfg.blockFireballExplosions) {
-                    event.setCancelled(true);
-                    return;
-                }
-                if (wcfg.useRegions) {
-                    Fireball fireball = (Fireball) attacker;
-                    Vector pt = toVector(defender.getLocation());
-                    RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
-                    ApplicableRegionSet set = mgr.getApplicableRegions(pt);
-                    if (fireball.getShooter() instanceof Player) {
-                        Vector pt2 = toVector(fireball.getShooter().getLocation());
-                        if (!mgr.getApplicableRegions(pt2).allows(DefaultFlag.PVP, plugin.wrapPlayer((Player) fireball.getShooter()))) {
-                            tryCancelPVPEvent((Player) fireball.getShooter(), player, event, true);
-                        } else if (!set.allows(DefaultFlag.PVP, localPlayer)) {
-                            tryCancelPVPEvent((Player) fireball.getShooter(), player, event, false);
+                if (attacker instanceof Fireball) {
+                    if (attacker instanceof WitherSkull) {
+                        if (wcfg.blockWitherSkullExplosions) {
+                            event.setCancelled(true);
+                            return;
                         }
                     } else {
-                        if (!set.allows(DefaultFlag.GHAST_FIREBALL, localPlayer)) {
+                        if (wcfg.blockFireballExplosions) {
                             event.setCancelled(true);
                             return;
                         }
                     }
+                    if (wcfg.useRegions) {
+                        Fireball fireball = (Fireball) attacker;
+                        Vector pt = toVector(defender.getLocation());
+                        RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
+                        ApplicableRegionSet set = mgr.getApplicableRegions(pt);
+                        if (fireball.getShooter() instanceof Player) {
+                            Vector pt2 = toVector(fireball.getShooter().getLocation());
+                            if (!mgr.getApplicableRegions(pt2).allows(DefaultFlag.PVP, plugin.wrapPlayer((Player) fireball.getShooter()))) {
+                                tryCancelPVPEvent((Player) fireball.getShooter(), player, event, true);
+                            } else if (!set.allows(DefaultFlag.PVP, localPlayer)) {
+                                tryCancelPVPEvent((Player) fireball.getShooter(), player, event, false);
+                            }
+                        } else {
+                            if (!set.allows(DefaultFlag.GHAST_FIREBALL, localPlayer)) {
+                                event.setCancelled(true);
+                                return;
+                            }
+                        }
 
+                    }
                 }
-            }
 
-            if (attacker != null && attacker instanceof LivingEntity && !(attacker instanceof Player)) {
-                if (attacker instanceof Creeper && wcfg.blockCreeperExplosions) {
-                    event.setCancelled(true);
-                    return;
-                }
-
-                if (wcfg.disableMobDamage) {
-                    event.setCancelled(true);
-                    return;
-                }
-
-                if (wcfg.useRegions) {
-                    Vector pt = toVector(defender.getLocation());
-                    RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
-                    ApplicableRegionSet set = mgr.getApplicableRegions(pt);
-
-                    if (!set.allows(DefaultFlag.MOB_DAMAGE, localPlayer)) {
+                if (attacker instanceof LivingEntity && !(attacker instanceof Player)) {
+                    if (attacker instanceof Creeper && wcfg.blockCreeperExplosions) {
                         event.setCancelled(true);
                         return;
                     }
 
-                    if (attacker instanceof Creeper) {
-                        if (!set.allows(DefaultFlag.CREEPER_EXPLOSION, localPlayer)) {
+                    if (wcfg.disableMobDamage) {
+                        event.setCancelled(true);
+                        return;
+                    }
+
+                    if (wcfg.useRegions) {
+                        Vector pt = toVector(defender.getLocation());
+                        RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
+                        ApplicableRegionSet set = mgr.getApplicableRegions(pt);
+
+                        if (!set.allows(DefaultFlag.MOB_DAMAGE, localPlayer) && !(attacker instanceof Tameable)) {
                             event.setCancelled(true);
                             return;
                         }
-                    }
-                }
 
+                        if (attacker instanceof Creeper) {
+                            if (!set.allows(DefaultFlag.CREEPER_EXPLOSION, localPlayer)) {
+                                event.setCancelled(true);
+                                return;
+                            }
+                        }
+                        if (attacker instanceof Tameable) {
+                            if (((Tameable) attacker).getOwner() == null) {
+                                if (!set.allows(DefaultFlag.MOB_DAMAGE, localPlayer)) {
+                                    event.setCancelled(true);
+                                    return;
+                                }
+                            }
+                            if (!(((Tameable) attacker).getOwner() instanceof Player)) {
+                                return;
+                            }
+                            Player beastMaster = (Player) ((Tameable) attacker).getOwner();
+                            Vector pt2 = toVector(attacker.getLocation());
+                            if (!mgr.getApplicableRegions(pt2).allows(DefaultFlag.PVP, plugin.wrapPlayer(beastMaster))) {
+                                tryCancelPVPEvent(beastMaster, player, event, true);
+                            } else if (!set.allows(DefaultFlag.PVP, localPlayer)) {
+                                tryCancelPVPEvent(beastMaster, player, event, false);
+                            }
+                        }
+                    }
+
+                }
             }
         }
     }
@@ -339,8 +425,9 @@ public class WorldGuardEntityListener implements Listener {
             }
 
             // Check Player
-            if (event.getDamager() instanceof EnderPearl || event.getDamager() instanceof Snowball) return;
+            // if (event.getDamager() instanceof EnderPearl || event.getDamager() instanceof Snowball) return;
             if (attacker != null && attacker instanceof Player) {
+                if (event.getDamager() instanceof EnderPearl && attacker == player) return;
                 if (wcfg.useRegions) {
                     Vector pt = toVector(defender.getLocation());
                     Vector pt2 = toVector(attacker.getLocation());
@@ -386,6 +473,25 @@ public class WorldGuardEntityListener implements Listener {
                 event.setCancelled(true);
                 player.setFireTicks(0);
                 return;
+            }
+
+            if (type == DamageCause.WITHER) {
+                // wither boss DoT tick
+                if (wcfg.disableMobDamage) {
+                    event.setCancelled(true);
+                    return;
+                }
+
+                if (wcfg.useRegions) {
+                    Vector pt = toVector(defender.getLocation());
+                    RegionManager mgr = plugin.getGlobalRegionManager().get(player.getWorld());
+                    ApplicableRegionSet set = mgr.getApplicableRegions(pt);
+
+                    if (!set.allows(DefaultFlag.MOB_DAMAGE, plugin.wrapPlayer(player))) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
             }
 
             if (type == DamageCause.DROWNING && cfg.hasAmphibiousMode(player)) {
@@ -464,120 +570,131 @@ public class WorldGuardEntityListener implements Listener {
         Entity ent = event.getEntity();
 
         if (cfg.activityHaltToggle) {
-            ent.remove();
+            if (ent != null) {
+                ent.remove();
+            }
             event.setCancelled(true);
             return;
         }
 
-        // Not all explosions come from an entity
-        if (ent != null) {
-            if (ent.getType() == witherType) {
-                if (wcfg.blockWitherBlockDamage) {
-                    event.blockList().clear();
-                    return;
-                }
-
-                if (wcfg.blockWitherExplosions) {
-                    event.setCancelled(true);
-                    return;
-                }
+        if (ent instanceof Creeper) {
+            if (wcfg.blockCreeperExplosions) {
+                event.setCancelled(true);
+                return;
+            }
+            if (wcfg.blockCreeperBlockDamage) {
+                event.blockList().clear();
+                return;
             }
 
-            if (ent.getType() == witherSkullType) {
-                if (wcfg.blockWitherSkullBlockDamage) {
-                    event.blockList().clear();
-                    return;
-                }
+            if (wcfg.useRegions) {
+                RegionManager mgr = plugin.getGlobalRegionManager().get(world);
 
+                for (Block block : event.blockList()) {
+                    if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.CREEPER_EXPLOSION)) {
+                        event.blockList().clear();
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+            }
+        } else if (ent instanceof EnderDragon) {
+            if (wcfg.blockEnderDragonBlockDamage) {
+                event.blockList().clear();
+                event.setCancelled(true);
+                return;
+            }
+
+            if (wcfg.useRegions) {
+                RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+
+                for (Block block : event.blockList()) {
+                    if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.ENDERDRAGON_BLOCK_DAMAGE)) {
+                        event.blockList().clear();
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+            }
+        } else if (ent instanceof TNTPrimed || (ent != null && ent.getType() == tntMinecartType)) {
+            if (wcfg.blockTNTExplosions) {
+                event.setCancelled(true);
+                return;
+            }
+            if (wcfg.blockTNTBlockDamage) {
+                event.blockList().clear();
+                return;
+            }
+
+            if (wcfg.useRegions) {
+                RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+
+                for (Block block : event.blockList()) {
+                    if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.TNT)) {
+                        event.blockList().clear();
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+            }
+        } else if (ent instanceof Fireball) {
+            if (ent instanceof WitherSkull) {
                 if (wcfg.blockWitherSkullExplosions) {
                     event.setCancelled(true);
                     return;
                 }
-            }
-
-            if (ent instanceof Creeper) {
-                if (wcfg.blockCreeperBlockDamage) {
+                if (wcfg.blockWitherSkullBlockDamage) {
                     event.blockList().clear();
                     return;
                 }
-
-                if (wcfg.blockCreeperExplosions) {
-                    event.setCancelled(true);
-                    return;
-                }
-
-                if (wcfg.useRegions) {
-                    if (wcfg.useRegions) {
-                        RegionManager mgr = plugin.getGlobalRegionManager().get(world);
-
-                        for (Block block : event.blockList()) {
-                            if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.CREEPER_EXPLOSION)) {
-                                event.blockList().clear();
-                                return;
-                            }
-                        }
-                    }
-                }
-            } else if (ent instanceof EnderDragon) {
-                if (wcfg.blockEnderDragonBlockDamage) {
-                    event.blockList().clear();
-                    return;
-                }
-
-                if (wcfg.useRegions) {
-                    RegionManager mgr = plugin.getGlobalRegionManager().get(world);
-
-                    for (Block block : event.blockList()) {
-                        if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.ENDERDRAGON_BLOCK_DAMAGE)) {
-                            event.blockList().clear();
-                            return;
-                        }
-                    }
-                }
-            } else if (ent instanceof TNTPrimed) {
-                if (wcfg.blockTNTBlockDamage) {
-                    event.blockList().clear();
-                    return;
-                }
-
-                if (wcfg.blockTNTExplosions) {
-                    event.setCancelled(true);
-                    return;
-                }
-
-                if (wcfg.useRegions) {
-                    RegionManager mgr = plugin.getGlobalRegionManager().get(world);
-
-                    for (Block block : event.blockList()) {
-                        if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.TNT)) {
-                            event.blockList().clear();
-                            return;
-                        }
-                    }
-                }
-            } else if (ent instanceof Fireball) {
-                if (wcfg.blockFireballBlockDamage) {
-                    event.blockList().clear();
-                    return;
-                }
-
+            } else {
                 if (wcfg.blockFireballExplosions) {
                     event.setCancelled(true);
                     return;
                 }
+                if (wcfg.blockFireballBlockDamage) {
+                    event.blockList().clear();
+                    return;
+                }
+            }
+            // allow wither skull blocking since there is no dedicated flag atm
+            if (wcfg.useRegions) {
+                RegionManager mgr = plugin.getGlobalRegionManager().get(world);
 
-                if (wcfg.useRegions) {
-                    RegionManager mgr = plugin.getGlobalRegionManager().get(world);
-
-                    for (Block block : event.blockList()) {
-                        if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.GHAST_FIREBALL)) {
-                            event.blockList().clear();
-                            return;
-                        }
+                for (Block block : event.blockList()) {
+                    if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.GHAST_FIREBALL)) {
+                        event.blockList().clear();
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+            }
+        } else if (ent instanceof Wither) {
+            if (wcfg.blockWitherExplosions) {
+                event.setCancelled(true);
+                return;
+            }
+            if (wcfg.blockWitherBlockDamage) {
+                event.blockList().clear();
+                return;
+            }
+        } else {
+            // unhandled entity
+            if (wcfg.blockOtherExplosions) {
+                event.setCancelled(true);
+                return;
+            }
+            if (wcfg.useRegions) {
+                RegionManager mgr = plugin.getGlobalRegionManager().get(world);
+                for (Block block : event.blockList()) {
+                    if (!mgr.getApplicableRegions(toVector(block)).allows(DefaultFlag.OTHER_EXPLOSION)) {
+                        event.setCancelled(true);
+                        return;
                     }
                 }
             }
         }
+
 
         if (wcfg.signChestProtection) {
             for (Block block : event.blockList()) {
@@ -605,31 +722,28 @@ public class WorldGuardEntityListener implements Listener {
             return;
         }
 
-        if (event.getEntityType() == witherType) {
+        if (event.getEntityType() == EntityType.WITHER) {
             if (wcfg.blockWitherExplosions) {
                 event.setCancelled(true);
                 return;
             }
-        }
-        else if (event.getEntityType() == witherSkullType) {
+        } else if (event.getEntityType() == EntityType.WITHER_SKULL) {
             if (wcfg.blockWitherSkullExplosions) {
                 event.setCancelled(true);
                 return;
             }
-        }
-        else if (event.getEntityType() == fireballType) {
+        } else if (event.getEntityType() == EntityType.FIREBALL) {
             if (wcfg.blockFireballExplosions) {
                 event.setCancelled(true);
                 return;
             }
-        }
-        else if (event.getEntityType() == EntityType.CREEPER) {
+        } else if (event.getEntityType() == EntityType.CREEPER) {
             if (wcfg.blockCreeperExplosions) {
                 event.setCancelled(true);
                 return;
             }
-        }
-        else if (event.getEntityType() == EntityType.PRIMED_TNT) {
+        } else if (event.getEntityType() == EntityType.PRIMED_TNT
+                || event.getEntityType() == tntMinecartType) {
             if (wcfg.blockTNTExplosions) {
                 event.setCancelled(true);
                 return;
@@ -689,6 +803,18 @@ public class WorldGuardEntityListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onCreatePortal(EntityCreatePortalEvent event) {
+        ConfigurationManager cfg = plugin.getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(event.getEntity().getWorld());
+
+        switch (event.getEntityType()) {
+            case ENDER_DRAGON:
+                if (wcfg.blockEnderDragonPortalCreation) event.setCancelled(true);
+                break;
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPigZap(PigZapEvent event) {
         ConfigurationManager cfg = plugin.getGlobalStateManager();
         WorldConfiguration wcfg = cfg.get(event.getEntity().getWorld());
@@ -724,55 +850,37 @@ public class WorldGuardEntityListener implements Listener {
     }
 
     /**
-     * Called when an enderman picks up or puts down a block and some other cases.
+     * Called when an entity changes a block somehow
      *
      * @param event Relevant event details
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onEndermanPickup(EntityChangeBlockEvent event) {
+    public void onEntityChangeBlock(EntityChangeBlockEvent event) {
         Entity ent = event.getEntity();
         Block block = event.getBlock();
         Location location = block.getLocation();
 
+        ConfigurationManager cfg = plugin.getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(ent.getWorld());
         if (ent instanceof Enderman) {
-            if (event.getTo() == Material.AIR) {
-                // pickup
-                ConfigurationManager cfg = plugin.getGlobalStateManager();
-                WorldConfiguration wcfg = cfg.get(ent.getWorld());
+            if (wcfg.disableEndermanGriefing) {
+                event.setCancelled(true);
+                return;
+            }
 
-                if (wcfg.disableEndermanGriefing) {
+            if (wcfg.useRegions) {
+                if (!plugin.getGlobalRegionManager().allows(DefaultFlag.ENDER_BUILD, location)) {
                     event.setCancelled(true);
                     return;
-                }
-
-                if (wcfg.useRegions) {
-                    if (!plugin.getGlobalRegionManager().allows(DefaultFlag.ENDER_BUILD, location)) {
-                        event.setCancelled(true);
-                        return;
-                    }
-                }
-            } else {
-                // place
-                ConfigurationManager cfg = plugin.getGlobalStateManager();
-                WorldConfiguration wcfg = cfg.get(ent.getWorld());
-
-                if (wcfg.disableEndermanGriefing) {
-                    event.setCancelled(true);
-                    return;
-                }
-
-                if (wcfg.useRegions) {
-                    if (!plugin.getGlobalRegionManager().allows(DefaultFlag.ENDER_BUILD, location)) {
-                        event.setCancelled(true);
-                        return;
-                    }
                 }
             }
-        } else if (ent.getType() == witherType) {
-            ConfigurationManager cfg = plugin.getGlobalStateManager();
-            WorldConfiguration wcfg = cfg.get(ent.getWorld());
-
+        } else if (ent.getType() == EntityType.WITHER) {
             if (wcfg.blockWitherBlockDamage || wcfg.blockWitherExplosions) {
+                event.setCancelled(true);
+                return;
+            }
+        } else if (/*ent instanceof Zombie && */event instanceof EntityBreakDoorEvent) {
+            if (wcfg.blockZombieDoorDestruction) {
                 event.setCancelled(true);
                 return;
             }

@@ -22,7 +22,8 @@ package com.sk89q.worldguard.protection;
 import com.sk89q.worldguard.protection.managers.PRTreeRegionManager;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 
-public class PRTreeRegionManagerTest extends RegionOverlapTest {
+public class PRTreeRegionEntryExitTest extends RegionEntryExitTest {
+    @Override
     protected RegionManager createRegionManager() throws Exception {
         return new PRTreeRegionManager(null);
     }
