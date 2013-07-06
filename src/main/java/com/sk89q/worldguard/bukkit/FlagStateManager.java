@@ -118,12 +118,14 @@ public class FlagStateManager implements Runnable {
         if (healAmount == null || healDelay == null || healAmount == 0 || healDelay < 0) {
             return;
         }
+
+        int tmpMaxHealth = Double.valueOf(player.getMaxHealth()).intValue();
         if (minHealth == null) minHealth = 0;
-        if (maxHealth == null) maxHealth = player.getMaxHealth();
+        if (maxHealth == null) maxHealth = (Integer) tmpMaxHealth;
 
         // Apply a cap to prevent possible exceptions
-        minHealth = Math.min(player.getMaxHealth(), minHealth);
-        maxHealth = Math.min(player.getMaxHealth(), maxHealth);
+        minHealth = Math.min(tmpMaxHealth, minHealth);
+        maxHealth = Math.min(tmpMaxHealth, maxHealth);
 
         if (player.getHealth() >= maxHealth && healAmount > 0) {
             return;
