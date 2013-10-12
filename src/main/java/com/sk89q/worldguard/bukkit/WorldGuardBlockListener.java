@@ -702,6 +702,14 @@ public class WorldGuardBlockListener implements Listener {
                 event.setCancelled(true);
                 return;
             }
+            if (wcfg.allowedSnowFallOver.size() > 0) {
+                int targetId = event.getBlock().getRelative(0, -1, 0).getTypeId();
+
+                if (!wcfg.allowedSnowFallOver.contains(targetId)) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
             if (wcfg.useRegions && !plugin.getGlobalRegionManager().allows(
                     DefaultFlag.SNOW_FALL, event.getBlock().getLocation())) {
                 event.setCancelled(true);
@@ -829,6 +837,18 @@ public class WorldGuardBlockListener implements Listener {
             }
             if (wcfg.useRegions && !plugin.getGlobalRegionManager().allows(
                     DefaultFlag.SNOW_MELT, event.getBlock().getLocation())) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        if (type == BlockID.SOIL) {
+            if (wcfg.disableSoilDehydration) {
+                event.setCancelled(true);
+                return;
+            }
+            if (wcfg.useRegions && !plugin.getGlobalRegionManager().allows(
+                    DefaultFlag.SOIL_DRY, event.getBlock().getLocation())) {
                 event.setCancelled(true);
                 return;
             }

@@ -130,6 +130,7 @@ public class WorldConfiguration {
     public boolean highFreqFlags;
     public int regionWand;
     public Set<EntityType> blockCreatureSpawn;
+    public boolean allowTamedSpawns;
     // public boolean useiConomy;
     // public boolean buyOnClaim;
     // public double buyOnClaimPrice;
@@ -162,11 +163,15 @@ public class WorldConfiguration {
     public boolean disableVineGrowth;
     public boolean disableEndermanGriefing;
     public boolean disableSnowmanTrails;
+    public boolean disableSoilDehydration;
+    public Set<Integer> allowedSnowFallOver;
     public boolean regionInvinciblityRemovesMobs;
+    public boolean explosionFlagCancellation;
     public boolean disableDeathMessages;
     public boolean disableObsidianGenerators;
 
     private Map<String, Integer> maxRegionCounts;
+
 
     /* Configuration data end */
 
@@ -353,6 +358,7 @@ public class WorldConfiguration {
         blockFireballExplosions = getBoolean("mobs.block-fireball-explosions", false);
         blockFireballBlockDamage = getBoolean("mobs.block-fireball-block-damage", false);
         antiWolfDumbness = getBoolean("mobs.anti-wolf-dumbness", false);
+        allowTamedSpawns = getBoolean("mobs.allow-tamed-spawns", true);
         disableEndermanGriefing = getBoolean("mobs.disable-enderman-griefing", false);
         disableSnowmanTrails = getBoolean("mobs.disable-snowman-trails", false);
         blockEntityPaintingDestroy = getBoolean("mobs.block-painting-destroy", false);
@@ -400,9 +406,12 @@ public class WorldConfiguration {
         disableGrassGrowth = getBoolean("dynamics.disable-grass-growth", false);
         disableMyceliumSpread = getBoolean("dynamics.disable-mycelium-spread", false);
         disableVineGrowth = getBoolean("dynamics.disable-vine-growth", false);
+        disableSoilDehydration = getBoolean("dynamics.disable-soil-dehydration", false);
+        allowedSnowFallOver = new HashSet<Integer>(getIntList("dynamics.snow-fall-blocks", null));
 
         useRegions = getBoolean("regions.enable", true);
         regionInvinciblityRemovesMobs = getBoolean("regions.invincibility-removes-mobs", false);
+        explosionFlagCancellation = getBoolean("regions.explosion-flags-block-entity-damage", true);
         highFreqFlags = getBoolean("regions.high-frequency-flags", false);
         regionWand = getInt("regions.wand", 334);
         maxClaimVolume = getInt("regions.max-claim-volume", 30000);
