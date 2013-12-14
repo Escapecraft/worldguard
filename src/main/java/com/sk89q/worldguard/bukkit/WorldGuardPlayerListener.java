@@ -47,6 +47,7 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -109,6 +110,7 @@ public class WorldGuardPlayerListener implements Listener {
     }
 
     // unsure if anyone actually started using this yet, but just in case...
+    @Deprecated
     public static boolean checkMove(WorldGuardPlugin plugin, Player player, World world, Location from, Location to) {
         return checkMove(plugin, player, from, to); // drop world since it used to be mishandled
     }
@@ -212,18 +214,14 @@ public class WorldGuardPlayerListener implements Listener {
                 || !state.lastFarewell.equals(farewell))) {
             String replacedFarewell = plugin.replaceMacros(
                     player, BukkitUtil.replaceColorMacros(state.lastFarewell));
-            for (String line : replacedFarewell.split("\n")) {
-                player.sendMessage(line);
-            }
+            player.sendMessage(replacedFarewell.replaceAll("\\\\n", "\n").split("\\n"));
         }
 
         if (greeting != null && (state.lastGreeting == null
                 || !state.lastGreeting.equals(greeting))) {
             String replacedGreeting = plugin.replaceMacros(
                     player, BukkitUtil.replaceColorMacros(greeting));
-            for (String line : replacedGreeting.split("\n")) {
-                player.sendMessage(line);
-            }
+            player.sendMessage(replacedGreeting.replaceAll("\\\\n", "\n").split("\\n"));
         }
 
         if ((notifyLeave == null || !notifyLeave)
@@ -463,6 +461,27 @@ public class WorldGuardPlayerListener implements Listener {
 
         cfg.forgetPlayer(plugin.wrapPlayer(player));
         plugin.forgetPlayer(player);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
+        // TODO reduce duplication with right-click-air
+        Player player = event.getPlayer();
+        World world = player.getWorld();
+        ItemStack item = player.getItemInHand();
+
+        ConfigurationManager cfg = plugin.getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(world);
+
+        if (wcfg.getBlacklist() != null) {
+            if (!wcfg.getBlacklist().check(
+                    new ItemUseBlacklistEvent(plugin.wrapPlayer(player),
+                            toVector(player.getLocation()),
+                    item.getTypeId()), false, false)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -1213,7 +1232,8 @@ public class WorldGuardPlayerListener implements Listener {
         Player player = event.getPlayer();
 
         if (wcfg.useRegions) {
-            if (!plugin.getGlobalRegionManager().allows(DefaultFlag.ITEM_DROP, player.getLocation())) {
+            if (!plugin.getGlobalRegionManager().hasBypass(player, player.getWorld())
+                    && !plugin.getGlobalRegionManager().allows(DefaultFlag.ITEM_DROP, player.getLocation())) {
                 event.setCancelled(true);
                 player.sendMessage(ChatColor.RED + "You don't have permission to do that in this area.");
             }
@@ -1259,7 +1279,7 @@ public class WorldGuardPlayerListener implements Listener {
 
         if (!plugin.getGlobalRegionManager().canBuild(
                 player, event.getBlockClicked().getRelative(event.getBlockFace()))
-                && !(event.getBucket().getId() == ItemID.MILK_BUCKET)) {
+                && !(event.getItemStack().getTypeId() == ItemID.MILK_BUCKET)) {
             player.sendMessage(ChatColor.DARK_RED + "You don't have permission for this area.");
             event.setCancelled(true);
             return;

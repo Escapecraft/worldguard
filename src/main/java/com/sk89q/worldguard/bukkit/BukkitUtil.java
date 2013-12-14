@@ -29,7 +29,14 @@ import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.*;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Tameable;
+import org.bukkit.entity.ExperienceOrb;
+import org.bukkit.entity.FallingBlock;
+import org.bukkit.entity.Item;
+import org.bukkit.entity.TNTPrimed;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import java.util.List;
 
@@ -242,6 +249,14 @@ public class BukkitUtil {
         str = str.replace("&2", ChatColor.GRAY.toString());
         str = str.replace("&w", ChatColor.WHITE.toString());
 
+        str = str.replace("&k", ChatColor.MAGIC.toString());
+        str = str.replace("&l", ChatColor.BOLD.toString());
+        str = str.replace("&m", ChatColor.STRIKETHROUGH.toString());
+        str = str.replace("&n", ChatColor.UNDERLINE.toString());
+        str = str.replace("&o", ChatColor.ITALIC.toString());
+
+        str = str.replace("&x", ChatColor.RESET.toString());
+
         return str;
     }
 
@@ -255,24 +270,10 @@ public class BukkitUtil {
         return entity instanceof Item
                 || entity instanceof TNTPrimed
                 || entity instanceof ExperienceOrb
-                || entity instanceof FallingSand
+                || entity instanceof FallingBlock
                 || (entity instanceof LivingEntity
                     && !(entity instanceof Tameable)
                     && !(entity instanceof Player));
-    }
-
-    /**
-     * Returns whether our running CraftBukkit already supports
-     * the HangingEvent instead of the PaintingEvent
-     *
-     * @return true if the hanging event is supported
-     */
-    public static boolean hasHangingEvent() {
-        Class<?> tmp = null;
-        try {
-            tmp = Class.forName("org.bukkit.event.hanging.HangingEvent");
-        } catch (ClassNotFoundException ignored) { }
-        return (tmp != null);
     }
 
     /**
