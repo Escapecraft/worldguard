@@ -128,8 +128,8 @@ public class FlagStateManager implements Runnable {
 		}
 
         // Apply a cap to prevent possible exceptions
-        minHealth = Math.min(tmpMaxHealth, minHealth);
-        maxHealth = Math.min(tmpMaxHealth, maxHealth);
+        minHealth = Math.min(player.getMaxHealth(), minHealth);
+        maxHealth = Math.min(player.getMaxHealth(), maxHealth);
 
         if (player.getHealth() >= maxHealth && healAmount > 0) {
             return;
