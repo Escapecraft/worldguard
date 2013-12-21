@@ -169,7 +169,7 @@ public abstract class RegionManager {
      * a set for the given reason.
      *
      * @param region region
-     * @return region set
+     * @return regino set
      */
     public abstract ApplicableRegionSet getApplicableRegions(
             ProtectedRegion region);

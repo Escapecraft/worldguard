@@ -56,11 +56,6 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     private int priority = 0;
 
     /**
-     * Land type.
-     */
-    private ClaimType claimType;
-
-    /**
      * Holds the curParent.
      */
     private ProtectedRegion parent;
@@ -121,30 +116,12 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * Gets the id of this region.
+     * Gets the id of this region
      *
      * @return the id
      */
     public String getId() {
         return id;
-    }
-
-    /**
-     * Gets the claim type of this region.
-     *
-     * @return the claim type
-     */
-    public ClaimType getClaimType() {
-        return claimType;
-    }
-
-    /**
-     * Sets the claim type of this region.
-     *
-     * @param type the claim type
-     */
-    public void setClaimType(ClaimType type) {
-        claimType = type;
     }
 
     /**
@@ -166,27 +143,6 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * Expand region to max vertical size.
-     *
-     * @param minY lowest Y
-     * @param maxY highest Y
-     */
-    public void expandVert(int minY, int maxY) {
-        min = new BlockVector(min.getBlockX(), minY, min.getBlockZ());
-        max = new BlockVector(max.getBlockX(), maxY, max.getBlockZ());
-    }
-
-    /**
-     * Expand region area evenly by number of specified blocks.
-     *
-     * @param amount the number of blocks to expand in X and Z directions
-     */
-    public void expandArea(int amount) {
-        min = new BlockVector(min.getBlockX() - amount, min.getBlockY(), min.getBlockZ() - amount);
-        max = new BlockVector(max.getBlockX() + amount, max.getBlockY(), max.getBlockZ() + amount);
-    }
-
-    /**
      * @return the priority
      */
     public int getPriority() {
@@ -194,7 +150,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param priority the priority to set
+     * @param priority the priority to setFlag
      */
     public void setPriority(int priority) {
         this.priority = priority;
@@ -211,7 +167,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
      * Set the curParent. This checks to make sure that it will not result
      * in circular inheritance.
      *
-     * @param parent the curParent to set
+     * @param parent the curParent to setFlag
      * @throws CircularInheritanceException when circular inheritance is detected
      */
     public void setParent(ProtectedRegion parent) throws CircularInheritanceException {
@@ -245,7 +201,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param owners the owners to set
+     * @param owners the owners to setFlag
      */
     public void setOwners(DefaultDomain owners) {
         this.owners = owners;
@@ -259,7 +215,7 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * @param members the members to set
+     * @param members the members to setFlag
      */
     public void setMembers(DefaultDomain members) {
         this.members = members;
@@ -455,32 +411,11 @@ public abstract class ProtectedRegion implements Comparable<ProtectedRegion> {
     }
 
     /**
-     * Gets the 2D points for this region.
+     * Gets the 2D points for this region
      *
      * @return The points for this region as (x, z) coordinates
      */
     public abstract List<BlockVector2D> getPoints();
-
-    /**
-     * Get the number of blocks in this region.
-     *
-     * @return the area of this region, in blocks
-     */
-    public abstract int area();
-
-    /**
-     * Get the x length, in blocks, of this region.
-     *
-     * @return the x length of the region, in blocks
-     */
-    public abstract int xLength();
-
-    /**
-     * Get the z length, in blocks, of this region.
-     *
-     * @return the z length of the region, in blocks
-     */
-    public abstract int zLength();
 
     /**
      * Get the number of blocks in this region

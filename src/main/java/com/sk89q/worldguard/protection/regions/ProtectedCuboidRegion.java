@@ -160,23 +160,6 @@ public class ProtectedCuboidRegion extends ProtectedRegion {
     }
 
     @Override
-    public int area() {
-        return xLength() * zLength();
-    }
-
-    @Override
-    public int xLength() {
-        int xLength = max.getBlockX() - min.getBlockX() + 1;
-        return xLength;
-    }
-
-    @Override
-    public int zLength() {
-        int zLength = max.getBlockZ() - min.getBlockZ() + 1;
-        return zLength;
-    }
-
-    @Override
     public int volume() {
         int xLength = max.getBlockX() - min.getBlockX() + 1;
         int yLength = max.getBlockY() - min.getBlockY() + 1;
